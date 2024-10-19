@@ -17,10 +17,10 @@ definePageMeta({
 const { data: products } = await useFetch('https://fakestoreapi.com/products')
 
 useHead({
-      title: 'Mein Shop | Produkte',
-      meta: [
+    title: 'Mein Shop | Produkte',
+    meta: [
         { name: 'description', content: 'Hier gibt es die Produkte' }
-      ]
+    ]
 })
 
 </script>

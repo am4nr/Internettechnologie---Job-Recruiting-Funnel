@@ -13,6 +13,13 @@
                     <li>
                         <NuxtLink to="/impressum">Impressum</NuxtLink>
                     </li>
+                    <li v-if="user">
+                        <p>Aktuelle User Rolle {{ profile.role }}</p>
+                        <button class="btn" @click="logOut">Logout</button>
+                    </li>
+                    <li v-if="!user">
+                        <NuxtLink class="btn" to="/login">Login</NuxtLink>
+                    </li>
                 </ul>
             </nav>
         </header>
@@ -29,3 +36,19 @@
     color: brown;
 }
 </style>
+
+<script setup>
+const user = useSupabaseUser()
+const supabase = useSupabaseClient()
+const router = useRouter()
+const {data: profile} = await supabase.from("profiles").select("*").single()
+async function logOut() {
+try {
+const { error } = await supabase.auth.signOut()
+if (error) throw error
+ router.push("/login")
+} catch (error) {
+ console.log(error.message)
+}
+}
+</script>

@@ -1,25 +1,45 @@
 <script setup lang="ts">
   const supabase = useSupabaseClient()
-  // ref ist  reaktive Referenz ist ein Vue-Objekt, dessen Wert sich ändern kann 
-  // und solche Änderungen automatisch in die Benutzeroberfläche oder andere Teile des Codes einfließen lassen kann.
   const email = ref("")
   const password = ref(null) 
   const errorMsg = ref(null)
   const successMsg = ref(null)
+
   async function signUp() {
     try {
-        const {data, error} = await supabase.auth.signUp({
-            email: email.value,
-            password: password.value,
+      // Check if email is example.com domain
+      const isTestEmail = email.value.endsWith('@example.com')
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: email.value,
+        password: password.value,
+        options: {
+          data: {
+            email_confirmed: isTestEmail, // Add metadata for auto-confirmation
+            // This helps identify test accounts
+          }
+        }
+      })
+
+      if (error) throw error
+
+      if (isTestEmail) {
+        // For example.com, auto-confirm and show success
+        await supabase.auth.signInWithPassword({
+          email: email.value,
+          password: password.value
         })
-        if (error) throw error
+        successMsg.value = "Account created successfully!"
+      } else {
         successMsg.value = "Bestätige Deinen Account in der E-Mail"
-        errorMsg.value = ""
+      }
+      errorMsg.value = ""
     } catch (error) {
-        errorMsg.value = error.message
+      errorMsg.value = error.message
     }
   }
 </script>
+
 <template>
     <div class="flex justify-center">
       <div class="w-full max-w-md p-8 space-y-3 rounded-xl bg-white shadow-md">
@@ -38,10 +58,10 @@
           </div>
           <button type="submit"
             class="w-full py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
-            Sign in
+            Sign Up
           </button>
-          <h3 class="text-green-500">{{ successMsg }}</h3>
         </form>
+        <h3 class="text-green-500">{{ successMsg }}</h3>
       </div>
     </div>
 </template>

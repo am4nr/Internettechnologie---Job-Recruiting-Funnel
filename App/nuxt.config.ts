@@ -40,5 +40,22 @@ export default defineNuxtConfig({
 
   // Enable dev tools for better debugging
   devtools: { enabled: true },
-  compatibilityDate: '2024-09-25'
+  compatibilityDate: '2024-09-25',
+
+  components: {
+    dirs: [
+      {
+        path: '~/components',
+        pathPrefix: false,
+      },
+      {
+        path: '~/components/navigation',
+        pathPrefix: false,
+      }
+    ]
+  },
+
+  router: {
+    middleware: ['auth']
+  }
 })

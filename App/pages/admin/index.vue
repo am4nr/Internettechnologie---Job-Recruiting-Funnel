@@ -1,4 +1,4 @@
-<!-- pages/dashboard/index.vue -->
+<!-- pages/admin/index.vue -->
 <script setup>
 definePageMeta({
   middleware: ['auth'],

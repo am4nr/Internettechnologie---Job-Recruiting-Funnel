@@ -16,3 +16,20 @@ body {
         @apply p-3 rounded-md bg-white shadow-md h-full;
     }
 }
+@layer components {
+    .menu-list {
+      @apply space-y-1;
+    }
+    
+    .nav-link {
+      @apply flex items-center p-2 rounded-lg transition-colors;
+    }
+    
+    .nav-link-active {
+      @apply bg-primary text-white;
+    }
+    
+    .nav-link-hover {
+      @apply hover:bg-base-200;
+    }
+  }

@@ -1,32 +1,22 @@
-import { useRouter, useRoute } from '#app'
+// composables/useNav.ts
+import { useRouter } from '#app'
 import { computed } from 'vue'
 import { useAuthState } from './useAuthState'
 
-interface NavItem {
+export interface NavItem {
   name: string
   path: string
-  location?: 'navbar' | 'footer'
-  children?: Omit<NavItem, 'location'>[]
-  primary?: boolean
+  location: 'navbar' | 'footer'
+  children?: NavItem[]
 }
 
 export const useNav = () => {
   const { isAuthenticated, userRole } = useAuthState()
   const router = useRouter()
 
-  // Add navigation guard
-  router.beforeEach((to, from, next) => {
-    console.log('Navigation:', { to, from })
-    if (!isAuthenticated.value && to.path === '/jobs/search') {
-      next('/auth/login')
-    } else {
-      next()
-    }
-  })
-  
-  console.log('Auth state:', {
-    isAuthenticated: isAuthenticated.value,
-    userRole: userRole.value
+  console.log('Nav setup:', { 
+    isAuthenticated: isAuthenticated.value, 
+    userRole: userRole.value 
   })
 
   const allNavItems = computed(() => {
@@ -63,6 +53,7 @@ export const useNav = () => {
     ]
 
     if (isAuthenticated.value) {
+      console.log('Adding dashboard items, role:', userRole.value)
       items.push({
         name: 'Dashboard',
         path: '/dashboard',
@@ -74,6 +65,7 @@ export const useNav = () => {
       })
 
       if (userRole.value === 'admin') {
+        console.log('Adding admin items')
         items.push({
           name: 'Admin',
           path: '/admin',
@@ -103,7 +95,6 @@ export const useNav = () => {
     navItems: debugNavItems,
     footerItems: computed(() => filterByLocation('footer')),
     allNavItems,
-    // Add isAuthenticated for components
     isAuthenticated,
     userRole
   }

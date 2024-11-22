@@ -1,0 +1,42 @@
+<!-- components/navigation/Navigation.vue -->
+<template>
+  <nav>
+    <div class="drawer drawer-end">
+      <input id="my-drawer-3" type="checkbox" class="drawer-toggle" />
+      <div class="drawer-content flex flex-col">
+        <div class="navbar bg-base-100 w-full px-4 lg:px-8">
+          <DesktopNavigation 
+            :logo-text="logoText"
+            :nav-items="navItems"
+            :user="user"
+          />
+          
+          <!-- Hamburger Button -->
+          <label for="my-drawer-3" class="p-2 cursor-pointer lg:hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" 
+              class="inline-block h-6 w-6 stroke-current">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </label>
+        </div>
+      </div>
+      
+      <MobileNavigation 
+        :logo-text="logoText"
+        :nav-items="navItems"
+        :user="user"
+      />
+    </div>
+  </nav>
+</template>
+
+<script setup lang="ts">
+import { useNav } from '~/composables/useNav'
+import { useSupabaseUser } from '#imports'
+import type { NavItem } from '~/types'
+
+const { navItems } = useNav()
+const user = useSupabaseUser()
+const logoText = "Job Portal"
+</script>

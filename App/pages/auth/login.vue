@@ -1,4 +1,8 @@
 <script setup>
+definePageMeta({
+  middleware: ['auth'],
+  requiresAuth: false 
+})
 const supabase = useSupabaseClient()
 const router = useRouter()
 

@@ -1,7 +1,8 @@
 <!-- pages/dashboard/index.vue -->
 <script setup>
 definePageMeta({
-  middleware: ['auth']
+  middleware: ['auth'],
+  requiresRole: 'admin'
 })
 
 const user = useSupabaseUser()

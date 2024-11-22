@@ -1,7 +1,11 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['@nuxtjs/tailwindcss', '@nuxtjs/supabase', 'nuxt-nodemailer'],
+  modules: [
+    '@nuxtjs/tailwindcss',
+    '@nuxtjs/supabase',
+    'nuxt-nodemailer', // Add this line
+  ],
 
   runtimeConfig: {
     public: {
@@ -51,11 +55,21 @@ export default defineNuxtConfig({
       {
         path: '~/components/navigation',
         pathPrefix: false,
+      },
+      {
+        path: '~/composables',
+        pathPrefix: false,
       }
     ]
   },
 
   router: {
     middleware: ['auth']
-  }
+  },
+  plugins: ['~/plugins/Vue3Lottie.client.ts'],
+  css: [
+    'daisyui/dist/full.css',
+    '@fortawesome/fontawesome-free/css/all.min.css',
+    '~/assets/css/tailwind.css',
+  ],
 })

@@ -1,22 +1,22 @@
 // composables/useNav.ts
 import { useRouter } from '#app'
 import { computed } from 'vue'
-import { useAuthState } from './useAuthState'
+import { useSupabaseStore } from './useSupabaseStore'
 
 export interface NavItem {
   name: string
   path: string
-  location: 'navbar' | 'footer'
+  location?: 'navbar' | 'footer'
   children?: NavItem[]
 }
 
 export const useNav = () => {
-  const { isAuthenticated, userRole } = useAuthState()
+  const store = useSupabaseStore()
   const router = useRouter()
 
   console.log('Nav setup:', { 
-    isAuthenticated: isAuthenticated.value, 
-    userRole: userRole.value 
+    isAuthenticated: store.auth.value.isAuthenticated,
+    role: store.auth.value.role
   })
 
   const allNavItems = computed(() => {
@@ -38,7 +38,7 @@ export const useNav = () => {
         location: 'footer',
         children: [
           { name: 'About', path: '/about' },
-          { name: 'Contact', path: '/contact' }
+          { name: 'Imprint', path: '/about/imprint' }
         ]
       },
       {
@@ -52,8 +52,7 @@ export const useNav = () => {
       }
     ]
 
-    if (isAuthenticated.value) {
-      console.log('Adding dashboard items, role:', userRole.value)
+    if (store.auth.value.isAuthenticated) {
       items.push({
         name: 'Dashboard',
         path: '/dashboard',
@@ -64,8 +63,7 @@ export const useNav = () => {
         ]
       })
 
-      if (userRole.value === 'admin') {
-        console.log('Adding admin items')
+      if (store.auth.value.role === 'admin') {
         items.push({
           name: 'Admin',
           path: '/admin',
@@ -81,21 +79,7 @@ export const useNav = () => {
     return items
   })
 
-  // Filter helpers
-  const filterByLocation = (location: 'navbar' | 'footer') => 
-    allNavItems.value.filter(item => item.location === location)
-
-  const debugNavItems = computed(() => {
-    const items = filterByLocation('navbar')
-    console.log('Filtered navbar items:', items)
-    return items
-  })
-
   return {
-    navItems: debugNavItems,
-    footerItems: computed(() => filterByLocation('footer')),
-    allNavItems,
-    isAuthenticated,
-    userRole
+    navItems: computed(() => allNavItems.value)
   }
 }

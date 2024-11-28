@@ -45,9 +45,24 @@
 </template>
 
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
+
 defineProps<{
   logoText: string
   navItems: NavItem[]
   user: any
 }>()
+
+const route = useRoute()
+const drawerCheckbox = ref<HTMLInputElement | null>(null)
+
+onMounted(() => {
+  drawerCheckbox.value = document.getElementById('my-drawer-3') as HTMLInputElement
+})
+
+watch(() => route.path, () => {
+  if (drawerCheckbox.value) {
+    drawerCheckbox.value.checked = false
+  }
+})
 </script>

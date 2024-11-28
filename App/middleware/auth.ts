@@ -1,7 +1,10 @@
 // middleware/auth.ts
+import { useSupabaseUser } from '#imports'
+import { useSupabaseStore } from '~/composables/useSupabaseStore'
+
 export default defineNuxtRouteMiddleware(async (to) => {
   const user = useSupabaseUser()
-  const { userRole } = useAuthState()
+  const store = useSupabaseStore()
   
   // Handle auth pages (requiresAuth: false)
   if (to.meta.requiresAuth === false && user.value) {
@@ -15,8 +18,8 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   // Check if role restriction exists
   const requiredRole = to.meta.requiresRole
-  if (requiredRole && userRole.value !== requiredRole) {
-    console.log(`Role ${requiredRole} required, but user has ${userRole.value}`)
+  if (requiredRole && store.auth.value.role !== requiredRole) {
+    console.log(`Role ${requiredRole} required, but user has ${store.auth.value.role}`)
     return navigateTo('/')
   }
 })

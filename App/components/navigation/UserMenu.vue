@@ -1,43 +1,64 @@
 <!-- components/navigation/UserMenu.vue -->
 <template>
   <div class="dropdown dropdown-top dropdown-start lg:dropdown-bottom lg:dropdown-end">
-    <label tabindex="0" class="btn btn-ghost btn-circle flex items-center justify-center p-0">
-      <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center">
-        <span class="text-lg font-semibold text-primary-content leading-none">
+    <label tabindex="0" class="btn btn-primary btn-circle rounded-full flex items-center justify-center p-0">
+      <div class="w-10 h-10 rounded-full flex items-center justify-center">
+        <span v-if="!isLoading" class="text-lg font-semibold text-primary-content leading-none">
           {{ userInitial }}
         </span>
+        <span v-else>...</span>
       </div>
     </label>
     <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
-      <!-- User Role Display -->
       <div class="px-4 py-2 text-sm border-b border-base-200">
-        <span class="font-medium text-base-content">{{ email }}</span>
-        <span class="block mt-1 text-xs text-base-content/70 capitalize">{{ userRole }}</span>
-        <span class="block mt-1 text-xs text-base-content/50 font-mono break-all">{{ uuid }}</span>
+        <span class="font-medium text-base-content">{{ userEmail }}</span>
+        <span class="block mt-1 text-xs text-base-content/70 capitalize">{{ currentRole }}</span>
+        <span class="block mt-1 text-xs text-base-content/50 font-mono break-all">{{ userId }}</span>
       </div>
       
       <li><NuxtLink to="/dashboard/profile">Profile</NuxtLink></li>
       <li><NuxtLink to="/dashboard/settings">Settings</NuxtLink></li>
-      <li><button @click="logout">Logout</button></li>
+      <li><button @click="store.logout" :disabled="store.auth.value.isLoading">
+        {{ store.auth.value.isLoading ? 'Logging out...' : 'Logout' }}
+      </button></li>
     </ul>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { User } from '@supabase/supabase-js'
+import { computed, onMounted, ref } from 'vue'
+import { useSupabaseStore } from '~/composables/useSupabaseStore'
 
-const props = defineProps<{
-  user: User
-}>()
+const store = useSupabaseStore()
+const isLoading = ref(true)
 
-const { email, userRole, uuid, logout } = useAuthState()
-
-const userInitial = computed(() => {
-  return props.user?.email?.charAt(0).toUpperCase() || '?'
+onMounted(async () => {
+  try {
+    await store.initialize()
+    console.log('After init:', {
+      user: store.auth.value.user,
+      profile: store.auth.value.profile,
+      role: store.auth.value.role
+    })
+  } finally {
+    isLoading.value = false
+  }
 })
 
-</script>
+const userInitial = computed(() => {
+  const email = store.auth.value?.user?.email || ''
+  return email ? email.charAt(0).toUpperCase() : '?'
+})
 
-<style scoped>
-/* Any additional styles if needed */
-</style>
+const userEmail = computed(() => 
+  store.auth.value?.user?.email || ''
+)
+
+const currentRole = computed(() => 
+  store.auth.value?.role || ''
+)
+
+const userId = computed(() => 
+  store.auth.value?.user?.id || ''
+)
+</script>

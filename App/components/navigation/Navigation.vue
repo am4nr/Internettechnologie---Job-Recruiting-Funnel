@@ -4,7 +4,7 @@
     <div class="drawer drawer-end">
       <input id="my-drawer-3" type="checkbox" class="drawer-toggle" />
       <div class="drawer-content flex flex-col">
-        <div class="navbar bg-base-100 w-full px-4 lg:px-8">
+        <div class="navbar bg-base-200 w-full px-4 lg:px-8">
           <DesktopNavigation 
             :logo-text="logoText"
             :nav-items="navItems"
@@ -34,7 +34,7 @@
 <script setup lang="ts">
 import { useNav } from '~/composables/useNav'
 import { useSupabaseUser } from '#imports'
-import type { NavItem } from '~/types'
+
 
 const { navItems } = useNav()
 const user = useSupabaseUser()

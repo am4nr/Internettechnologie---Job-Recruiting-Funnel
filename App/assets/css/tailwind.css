@@ -6,16 +6,7 @@ body {
     @apply bg-gray-50
 }
 
-@layer components {
-    .btn {
-        @apply bg-[#229922] text-white px-3 py-2 rounded-md text-sm text-white;
-        
-    }
 
-    .card {
-        @apply p-3 rounded-md bg-white shadow-md h-full;
-    }
-}
 @layer components {
     .menu-list {
       @apply space-y-1;

@@ -1,27 +1,32 @@
 <!-- components/layout/Footer.vue -->
 <template>
-    <footer class="bg-gray-100">
-      <div class="container mx-auto px-4 py-6">
-        <div class="flex flex-col md:flex-row justify-between">
-          <!-- Footer Links -->
-          <div class="mb-4 md:mb-0">
-            <h2 class="font-semibold mb-2">Company</h2>
-            <ul class="space-y-1">
-              <li>
-                <NuxtLink to="/about" class="text-gray-600 hover:text-blue-600">About Us</NuxtLink>
-              </li>
-              <li>
-                <NuxtLink to="/contact" class="text-gray-600 hover:text-blue-600">Contact</NuxtLink>
-              </li>
-            </ul>
-          </div>
-          <!-- Copyright -->
-          <div class="text-gray-600 mt-4 md:mt-0">
-            &copy; {{ new Date().getFullYear() }} Job Portal. All rights reserved.
-          </div>
-        </div>
-      </div>
-    </footer>
-  </template>
-  
-  <script setup lang="ts"></script>
+  <footer class="footer bg-base-300 text-base-content p-10">
+    <aside>
+      <p>
+        Job Portal
+        <br />
+        Find your next opportunity
+      </p>
+    </aside>
+
+    <nav v-for="item in footerItems" :key="item.path">
+      <h6 class="footer-title">{{ item.name }}</h6>
+      <template v-if="item.children">
+        <NuxtLink 
+          v-for="child in item.children" 
+          :key="child.path"
+          :to="child.path"
+          class="link link-hover"
+        >
+          {{ child.name }}
+        </NuxtLink>
+      </template>
+    </nav>
+  </footer>
+</template>
+
+<script setup lang="ts">
+import { useNav } from '~/composables/useNav'
+
+const { footerItems } = useNav()
+</script>

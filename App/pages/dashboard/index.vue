@@ -10,7 +10,7 @@ const applications = ref([])
 
 if (user.value) {
   const { data, error } = await supabase
-    .from("bewerbungen")
+    .from("applications")
     .select("*")
   if (error) {
     console.error('Error fetching applications:', error.message)

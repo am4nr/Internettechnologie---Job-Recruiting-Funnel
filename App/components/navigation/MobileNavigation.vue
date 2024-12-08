@@ -32,7 +32,7 @@
 
       <div class="mt-auto p-4 border-t border-base-300">
         <template v-if="user">
-          <UserMenu :user="user" />
+          <UserMenu :user="user" position="top-left" />
         </template>
         <template v-else>
           <NuxtLink to="/auth/login" class="btn btn-primary btn-sm w-full">

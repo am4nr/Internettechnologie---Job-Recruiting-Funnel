@@ -3,9 +3,9 @@
   <footer class="footer bg-base-300 text-base-content p-10">
     <aside>
       <p>
-        Job Portal
+        Kistenkönige
         <br />
-        Find your next opportunity
+        Ihr zuverlässiger Partner für Transport Dienstleistungen
       </p>
     </aside>
 

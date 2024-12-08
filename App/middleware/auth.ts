@@ -1,18 +1,33 @@
 // middleware/auth.ts
-import { useSupabaseUser } from '#imports'
-import { useSupabaseStore } from '~/composables/useSupabaseStore'
-
 export default defineNuxtRouteMiddleware(async (to) => {
   const user = useSupabaseUser()
   const store = useSupabaseStore()
+
+  // Wait for auth store to be initialized
+  if (!store.auth.value.isInitialized) {
+    await store.initialize()
+  }
+
+  // Debug logging
+  console.log('Auth Middleware:', {
+    path: to.path,
+    user: user.value?.email,
+    role: store.auth.value.role,
+    requiredRole: to.meta.requiresRole,
+    isAuthenticated: store.auth.value.isAuthenticated,
+    isInitialized: store.auth.value.isInitialized
+  })
   
   // Handle auth pages (requiresAuth: false)
-  if (to.meta.requiresAuth === false && user.value) {
-    return navigateTo('/dashboard')
+  if (to.meta.requiresAuth === false) {
+    if (store.auth.value.isAuthenticated) {
+      return navigateTo('/dashboard')
+    }
+    return
   }
 
   // Handle protected pages (requiresAuth: true or undefined)
-  if (to.meta.requiresAuth !== false && !user.value) {
+  if (!store.auth.value.isAuthenticated) {
     return navigateTo('/auth/login')
   }
 

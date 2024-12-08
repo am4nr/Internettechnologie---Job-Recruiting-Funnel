@@ -1,85 +1,124 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useSupabaseStore } from '~/composables/useSupabaseStore'
+import type { UserWithRole } from '~/types/auth'
+
+definePageMeta({
+  layout: 'admin',
+  middleware: ['auth']
+})
 
 const store = useSupabaseStore()
-const loading = ref(true)
+const loading = ref(false)
+const error = ref<string | null>(null)
+const users = ref<UserWithRole[]>([])
 
-// Fetch users on mount
+// Load users on page mount
 onMounted(async () => {
+  loading.value = true
   try {
-    await store.fetchUsers()
+    const { data, error: fetchError } = await store.fetchUsers()
+    if (fetchError) throw fetchError
+    users.value = data || []
+  } catch (err: any) {
+    error.value = err.message
+    console.error('Error loading users:', err)
   } finally {
     loading.value = false
   }
 })
 
-// Computed properties
-const users = computed(() => store.users.value)
-const canEditAll = computed(() => store.isAdmin.value)
+// Available roles
+const availableRoles = ['admin', 'recruiter', 'applicant']
 
-// Role management
-const updateUserRole = async (userId: string, newRole: string) => {
+// Update user role
+const updateRole = async (user: UserWithRole, newRole: string) => {
   try {
-    loading.value = true
-    await store.updateUserRole(userId, newRole as AppRole)
-  } catch (error) {
-    console.error('Failed to update role:', error)
-    // TODO: Add error handling/notification
-  } finally {
-    loading.value = false
+    await store.updateUserRole(user.id, newRole as any)
+  } catch (err: any) {
+    error.value = err.message
+    console.error('Error updating role:', err)
   }
+}
+
+// Get user initials
+const getUserInitials = (user: UserWithRole) => {
+  if (!user.first_name && !user.last_name) {
+    return user.email.charAt(0).toUpperCase()
+  }
+  return `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase()
 }
 </script>
 
 <template>
-  <div class="users-container p-4">
-    <h1 class="text-2xl font-bold mb-4">User Management</h1>
-
-    <div v-if="loading" class="loading-spinner flex justify-center items-center p-8">
-      <div class="loading loading-spinner text-primary"></div>
+  <div class="h-full flex flex-col">
+    <div class="border-b">
+      <div class="px-6 py-4">
+        <h1 class="text-2xl font-bold">User Management</h1>
+      </div>
     </div>
+    
+    <div class="flex-1 overflow-auto">
+      <div class="p-6">
+        <div v-if="loading" class="flex justify-center items-center py-8">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
 
-    <div v-else-if="users.length === 0" class="text-center p-8">
-      No users found.
-    </div>
+        <div v-if="error" class="alert alert-error mb-6">
+          {{ error }}
+        </div>
 
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div v-for="user in users" 
-           :key="user.id" 
-           class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-          <div class="user-info">
-            <h3 class="card-title">{{ user.email }}</h3>
-            <p>{{ user.first_name }} {{ user.last_name }}</p>
-            <p class="text-sm opacity-70">
-              Created: {{ new Date(user.created_at).toLocaleDateString() }}
-            </p>
-          </div>
+        <div v-else-if="users.length === 0" class="text-center py-8 text-gray-500">
+          No users found.
+        </div>
 
-          <div v-if="canEditAll" class="role-selector mt-4">
-            <label class="label">Role:</label>
-            <select 
-              :value="user.role"
-              @change="e => updateUserRole(user.id, e.target.value)"
-              class="select select-bordered w-full"
-            >
-              <option value="admin">Admin</option>
-              <option value="recruiter">Recruiter</option>
-              <option value="applicant">Applicant</option>
-            </select>
-          </div>
-
-          <div class="permissions-list mt-4" v-if="canEditAll">
-            <h4 class="font-semibold mb-2">Permissions:</h4>
-            <div class="flex flex-wrap gap-1">
-              <span v-for="permission in user.permissions" 
-                    :key="permission"
-                    class="badge badge-sm">
-                {{ permission }}
-              </span>
-            </div>
-          </div>
+        <div v-else>
+          <table class="table table-zebra w-full">
+            <thead>
+              <tr>
+                <th class="bg-base-200/50">User</th>
+                <th class="bg-base-200/50">Email</th>
+                <th class="bg-base-200/50">Role</th>
+                <th class="bg-base-200/50">Joined</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="user in users" :key="user.id">
+                <td>
+                  <div class="flex items-center gap-3">
+                    <div class="avatar placeholder">
+                      <div class="bg-neutral text-neutral-content rounded-full w-10">
+                        <span class="text-lg">{{ getUserInitials(user) }}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div class="font-bold">{{ user.first_name }} {{ user.last_name }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="text-sm">{{ user.email }}</td>
+                <td>
+                  <div class="dropdown dropdown-bottom">
+                    <div tabindex="0" role="button" class="badge badge-outline gap-1 cursor-pointer">
+                      {{ user.role }}
+                      <i class="fas fa-chevron-down text-xs"></i>
+                    </div>
+                    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+                      <li v-for="role in availableRoles" :key="role">
+                        <a 
+                          :class="{ 'active': user.role === role }"
+                          @click="updateRole(user, role)"
+                        >
+                          {{ role }}
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
+                </td>
+                <td class="text-sm">{{ new Date(user.created_at).toLocaleDateString() }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -87,8 +126,5 @@ const updateUserRole = async (userId: string, newRole: string) => {
 </template>
 
 <style scoped>
-.users-container {
-  max-width: 1200px;
-  margin: 0 auto;
-}
+/* Remove the unused style */
 </style>

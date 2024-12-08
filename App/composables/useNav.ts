@@ -28,7 +28,7 @@ export const useNav = () => {
         location: 'navbar',
         children: [
           { name: 'Search', path: '/jobs/search' },
-          { name: 'Apply', path: '/jobs/apply' }
+          { name: 'Apply', path: '/jobs/apply' },
         ]
       },
       // Footer items

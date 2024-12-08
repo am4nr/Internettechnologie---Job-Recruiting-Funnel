@@ -4,22 +4,29 @@ export default defineNuxtConfig({
   modules: [
     '@nuxtjs/tailwindcss',
     '@nuxtjs/supabase',
-    'nuxt-nodemailer', // Add this line
+    'nuxt-nodemailer',
   ],
+
+  supabase: {
+    redirect: false,
+    redirectOptions: {
+      login: '/auth/login',
+      callback: '/auth/confirm',
+      exclude: [],
+    },
+    cookieOptions: {
+      name: 'sb-auth',
+      lifetime: 60 * 60 * 8, // 8 hours
+      domain: '',
+      path: '/',
+      sameSite: 'lax'
+    }
+  },
 
   runtimeConfig: {
     public: {
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseKey: process.env.SUPABASE_KEY,
-      supabase: {
-        redirect: false, // Ensure this is set to false
-        redirectOptions: {
-          login: '/login',
-          callback: '/confirm',
-          exclude: [],
-          cookieRedirect: false
-        }
-      }
     },
     private: {
       supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -63,9 +70,6 @@ export default defineNuxtConfig({
     ]
   },
 
-  router: {
-    middleware: ['auth']
-  },
   plugins: ['~/plugins/Vue3Lottie.client.ts'],
   css: [
     'daisyui/dist/full.css',

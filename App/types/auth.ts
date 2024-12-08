@@ -1,28 +1,28 @@
 // types/auth.ts
 import type { User } from '@supabase/supabase-js'
+import type { Database } from './database'
 
-export type AppRole = 'admin' | 'recruiter' | 'applicant' 
+export type AppRole = 'admin' | 'recruiter' | 'applicant'
+export type AppPermission = string
 
-export interface UserProfile {
-  id: string
-  email: string
-  first_name: string | null
-  last_name: string | null
-  created_at: string
-  updated_at: string
+export type UserProfile = Database['public']['Tables']['profiles']['Row']
+
+export interface UserWithRole extends UserProfile {
+  role: AppRole
+  permissions: AppPermission[]
+}
+
+export interface Role {
+  name: string
+  permissions: AppPermission[]
 }
 
 export interface Application {
   id: string
   user_id: string
-  position: string
-  status: string
-  cover_letter: string | null
-  resume_url: string | null
+  job_id: string
+  status: 'pending' | 'reviewing' | 'accepted' | 'rejected'
   created_at: string
-}
-
-export interface UserWithRole extends UserProfile {
-  role: AppRole
-  permissions: string[]
+  updated_at: string
+  responses: any[]
 }

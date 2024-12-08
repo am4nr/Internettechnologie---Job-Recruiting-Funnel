@@ -21,7 +21,7 @@
 
     <div class="flex-none gap-2 hidden lg:block">
       <template v-if="user">
-        <UserMenu :user="user" />
+        <UserMenu :user="user" position="bottom-right" />
       </template>
       <template v-else>
         <NuxtLink to="/auth/login" class="btn btn-primary btn-sm">Login</NuxtLink>

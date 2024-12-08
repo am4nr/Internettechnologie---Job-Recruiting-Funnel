@@ -1,142 +1,152 @@
 <!-- pages/admin/roles.vue -->
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useSupabaseStore } from '~/composables/useSupabaseStore'
+import type { Role } from '~/types/auth'
 
 definePageMeta({
-  middleware: ['auth'],
-  requiresRole: 'admin'
+  layout: 'admin',
+  middleware: ['auth']
 })
 
 const store = useSupabaseStore()
-const loading = ref(true)
-const roles = ref([])
-const permissions = ref([])
-const newRole = ref('')
-const selectedRole = ref(null)
+const loading = ref(false)
+const error = ref<string | null>(null)
+const roles = ref<Role[]>([])
 
-// Fetch roles and permissions
+// Load roles on page mount
 onMounted(async () => {
+  loading.value = true
   try {
-    const { data: rolesData, error: rolesError } = await store.supabase
-      .from('roles')
-      .select('*')
-    
-    if (rolesError) throw rolesError
-    roles.value = rolesData
-
-    const { data: permsData, error: permsError } = await store.supabase
-      .from('role_permissions')
-      .select('role, permission')
-    
-    if (permsError) throw permsError
-    permissions.value = permsData
+    const { data, error: fetchError } = await store.fetchRoles()
+    if (fetchError) throw fetchError
+    roles.value = data || []
+  } catch (err: any) {
+    error.value = err.message
+    console.error('Error loading roles:', err)
   } finally {
     loading.value = false
   }
 })
 
-// Role management
-const createRole = async () => {
-  try {
-    loading.value = true
-    const { error } = await store.supabase
-      .from('roles')
-      .insert({ name: newRole.value })
-    
-    if (error) throw error
-    newRole.value = ''
-  } catch (error) {
-    console.error('Failed to create role:', error)
-  } finally {
-    loading.value = false
+// Permission groups
+const permissionGroups = {
+  profiles: {
+    title: 'User Profiles',
+    permissions: [
+      { name: 'profiles.create', label: 'Create Profiles' },
+      { name: 'profiles.read_own', label: 'View Own Profile' },
+      { name: 'profiles.read_all', label: 'View All Profiles' },
+      { name: 'profiles.update_own', label: 'Edit Own Profile' },
+      { name: 'profiles.update_all', label: 'Edit All Profiles' },
+      { name: 'profiles.delete_own', label: 'Delete Own Profile' },
+      { name: 'profiles.delete_all', label: 'Delete All Profiles' }
+    ]
+  },
+  applications: {
+    title: 'Applications',
+    permissions: [
+      { name: 'applications.create', label: 'Create Applications' },
+      { name: 'applications.read_own', label: 'View Own Applications' },
+      { name: 'applications.read_all', label: 'View All Applications' },
+      { name: 'applications.update_own', label: 'Edit Own Applications' },
+      { name: 'applications.update_all', label: 'Edit All Applications' },
+      { name: 'applications.delete_own', label: 'Delete Own Applications' },
+      { name: 'applications.delete_all', label: 'Delete All Applications' },
+      { name: 'applications.change_status', label: 'Change Application Status' }
+    ]
+  },
+  jobs: {
+    title: 'Jobs',
+    permissions: [
+      { name: 'jobs.create', label: 'Create Jobs' },
+      { name: 'jobs.read_own', label: 'View Own Jobs' },
+      { name: 'jobs.read_all', label: 'View All Jobs' },
+      { name: 'jobs.update_own', label: 'Edit Own Jobs' },
+      { name: 'jobs.update_all', label: 'Edit All Jobs' },
+      { name: 'jobs.delete_all', label: 'Delete Jobs' },
+      { name: 'jobs.publish', label: 'Publish Jobs' }
+    ]
+  },
+  roles: {
+    title: 'Roles',
+    permissions: [
+      { name: 'roles.create', label: 'Create Roles' },
+      { name: 'roles.read_all', label: 'View Roles' },
+      { name: 'roles.update_all', label: 'Edit Roles' },
+      { name: 'roles.delete_all', label: 'Delete Roles' }
+    ]
+  },
+  permissions: {
+    title: 'Permissions',
+    permissions: [
+      { name: 'permissions.create', label: 'Create Permissions' },
+      { name: 'permissions.read_all', label: 'View Permissions' },
+      { name: 'permissions.update_all', label: 'Edit Permissions' },
+      { name: 'permissions.delete_all', label: 'Delete Permissions' }
+    ]
+  },
+  forms: {
+    title: 'Forms',
+    permissions: [
+      { name: 'forms.create', label: 'Create Forms' },
+      { name: 'forms.read_all', label: 'View Forms' },
+      { name: 'forms.update_all', label: 'Edit Forms' },
+      { name: 'forms.delete_all', label: 'Delete Forms' }
+    ]
   }
 }
 
-const updateRolePermissions = async (role: string, permission: string, enabled: boolean) => {
+// Toggle permission for a role
+const togglePermission = async (role: Role, permission: string) => {
+  const hasPermission = role.permissions.includes(permission)
   try {
-    loading.value = true
-    if (enabled) {
-      await store.supabase
-        .from('role_permissions')
-        .insert({ role, permission })
-    } else {
-      await store.supabase
-        .from('role_permissions')
-        .delete()
-        .match({ role, permission })
-    }
-  } catch (error) {
-    console.error('Failed to update permissions:', error)
-  } finally {
-    loading.value = false
+    const { data, error: updateError } = await store.updateRolePermissions(role.name, permission, !hasPermission)
+    if (updateError) throw updateError
+    if (data) roles.value = data
+  } catch (err: any) {
+    error.value = err.message
+    console.error('Error toggling permission:', err)
   }
 }
 </script>
 
 <template>
-  <div class="p-4">
-    <h1 class="text-2xl font-bold mb-4">Role Management</h1>
-
-    <!-- Loading State -->
-    <div v-if="loading" class="flex justify-center p-8">
-      <div class="loading loading-spinner text-primary"></div>
+  <div class="p-6">
+    <h1 class="text-2xl font-bold mb-6">Role Management</h1>
+    
+    <div v-if="loading" class="flex justify-center items-center py-8">
+      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     </div>
 
-    <div v-else class="space-y-6">
-      <!-- Create New Role -->
-      <div class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-          <h2 class="card-title">Create New Role</h2>
-          <div class="flex gap-4">
-            <input 
-              v-model="newRole"
-              type="text"
-              placeholder="Role name"
-              class="input input-bordered flex-1"
-            />
-            <button 
-              @click="createRole"
-              class="btn btn-primary"
-              :disabled="!newRole"
-            >
-              Create
-            </button>
-          </div>
-        </div>
-      </div>
+    <div v-if="error" class="alert alert-error mb-6">
+      {{ error }}
+    </div>
 
-      <!-- Role List -->
-      <div class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-          <h2 class="card-title mb-4">Roles & Permissions</h2>
-          
-          <div class="overflow-x-auto">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>roles.create</th>
-                  <th>roles.read_all</th>
-                  <th>roles.update_all</th>
-                  <th>roles.delete_all</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="role in roles" :key="role.name">
-                  <td>{{ role.name }}</td>
-                  <td v-for="perm in ['roles.create', 'roles.read_all', 'roles.update_all', 'roles.delete_all']" 
-                      :key="perm">
-                    <input 
-                      type="checkbox"
-                      :checked="permissions.some(p => p.role === role.name && p.permission === perm)"
-                      @change="e => updateRolePermissions(role.name, perm, e.target.checked)"
-                      class="checkbox checkbox-primary"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+    <div v-else-if="roles.length === 0" class="text-center py-8 text-gray-500">
+      No roles found.
+    </div>
+
+    <div v-else class="grid gap-6">
+      <div v-for="role in roles" :key="role.name" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold mb-4 capitalize">{{ role.name }}</h2>
+        
+        <div class="space-y-6">
+          <div v-for="(group, key) in permissionGroups" :key="key" class="border-t pt-4 first:border-t-0 first:pt-0">
+            <h3 class="font-semibold mb-3">{{ group.title }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div v-for="perm in group.permissions" :key="perm.name" class="flex items-center">
+                <label class="inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    :checked="role.permissions.includes(perm.name)"
+                    @change="togglePermission(role, perm.name)"
+                    class="form-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary"
+                  >
+                  <span class="ml-2 text-sm">{{ perm.label }}</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </div>

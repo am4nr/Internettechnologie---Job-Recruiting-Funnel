@@ -1,6 +1,6 @@
 <template>
     <div>
-        <h1>Jobs {{route.params.id}}</h1>
+        <h1>Applying for {{route.params.id}}</h1>
         <p>lorem ipsum</p>
     </div>
 </template>

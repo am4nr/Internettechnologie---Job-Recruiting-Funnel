@@ -34,7 +34,7 @@ export const useNav = () => {
       // Footer items
       {
         name: 'Company',
-        path: '/company',
+        path: '/about',
         location: 'footer',
         children: [
           { name: 'About', path: '/about' },

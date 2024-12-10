@@ -5,7 +5,7 @@
       <div class="flex justify-between items-center h-16">
         <!-- Logo -->
         <NuxtLink to="/" class="flex items-center font-bold text-xl">
-          Job Portal
+          Kistenkönige Logistik
         </NuxtLink>
         <!-- Navigation -->
         <Navigation />

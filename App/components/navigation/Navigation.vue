@@ -38,5 +38,5 @@ import { useSupabaseUser } from '#imports'
 
 const { navItems } = useNav()
 const user = useSupabaseUser()
-const logoText = "Job Portal"
+const logoText = "Kistenkönige Logistik"
 </script>

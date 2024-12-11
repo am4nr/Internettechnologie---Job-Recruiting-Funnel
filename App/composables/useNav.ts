@@ -80,6 +80,7 @@ export const useNav = () => {
   })
 
   return {
-    navItems: computed(() => allNavItems.value)
+    navItems: computed(() => allNavItems.value.filter(item => item.location === 'navbar')),
+    footerItems: computed(() => allNavItems.value.filter(item => item.location === 'footer'))
   }
 }

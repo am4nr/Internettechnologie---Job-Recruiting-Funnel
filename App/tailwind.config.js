@@ -8,7 +8,35 @@ export default {
     "./nuxt.config.{js,ts}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        gray: {
+          50: '#F9FAFB',
+          100: '#F3F4F6',
+          700: '#374151',
+          800: '#1F2937',
+        },
+        primary: {
+          DEFAULT: '#2563eb',
+          '25': 'rgba(37, 99, 235, 0.25)'
+        }
+      },
+      boxShadow: {
+        'inner': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
+        'sm': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+        'md': '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+      },
+      borderRadius: {
+        'lg': '0.5rem',
+        'xl': '1rem',
+      },
+      fontSize: {
+        'lg': ['1.125rem', '1.75rem'],
+        '2xl': ['1.5rem', '2rem'],
+        '3xl': ['1.875rem', '2.25rem'],
+        '4xl': ['2.25rem', '2.5rem'],
+      },
+    },
   },
   plugins: [
     require('daisyui')
@@ -16,56 +44,37 @@ export default {
   daisyui: {
     themes: [
       {
-      mytheme: {
-        "primary": "#2563eb",
-                
-        "primary-content": "#d2e2ff",
-                
-        "secondary": "#2dd4bf",
-                
-        "secondary-content": "#01100d",
-                
-        "accent": "#f43f5e",
-                
-        "accent-content": "#160f10",
-                
-        "neutral": "#d1d5db",
-                
-        "neutral-content": "#101011",
-                
-        "base-100": "#1f2937",
-                
-        "base-200": "#19222e",
-                
-        "base-300": "#141c26",
-                
-        "base-content": "#cdd0d3",
-                
-        "info": "#f3f4f6",
-                
-        "info-content": "#141415",
-                
-        "success": "#6ee7b7",
-                
-        "success-content": "#04130c",
-                
-        "warning": "#fde047",
-                
-        "warning-content": "#161202",
-                
-        "error": "#f87171",
-                
-        "error-content": "#150404",
+        mytheme: {
+          "primary": "#2563eb",
+          "primary-content": "#ffffff",
+          "secondary": "#2dd4bf",
+          "secondary-content": "#ffffff",
+          "accent": "#f43f5e",
+          "accent-content": "#ffffff",
+          "neutral": "#374151",
+          "neutral-content": "#ffffff",
+          "base-100": "#ffffff",
+          "base-200": "#F9FAFB",
+          "base-300": "#F3F4F6",
+          "base-content": "#1F2937",
+          "info": "#3b82f6",
+          "info-content": "#ffffff",
+          "success": "#22c55e",
+          "success-content": "#ffffff",
+          "warning": "#f59e0b",
+          "warning-content": "#ffffff",
+          "error": "#ef4444",
+          "error-content": "#ffffff",
         },
       },
     ],
-    darkTheme: "dark", // name of one of the included themes for dark mode
-    base: true, // applies background color and foreground color for root element by default
-    styled: true, // include daisyUI colors and design decisions for all components
-    utils: true, // adds responsive and modifier utility classes
-    prefix: "", // prefix for daisyUI classnames (components, modifiers and responsive class names. Not colors)
-    logs: true, // Shows info about daisyUI version and used config in the console when building your CSS
-    themeRoot: ":root", // The element that receives theme color CSS variables
+    darkTheme: "dark",
+    base: true,
+    styled: true,
+    utils: true,
+    prefix: "",
+    logs: true,
+    themeRoot: ":root",
   },
 }
 

@@ -1,6 +1,6 @@
 <!-- components/navigation/Navigation.vue -->
 <template>
-  <nav>
+  <nav class="relative z-50">
     <div class="drawer drawer-end">
       <input id="my-drawer-3" type="checkbox" class="drawer-toggle" />
       <div class="drawer-content flex flex-col">
@@ -34,7 +34,6 @@
 <script setup lang="ts">
 import { useNav } from '~/composables/useNav'
 import { useSupabaseUser } from '#imports'
-
 
 const { navItems } = useNav()
 const user = useSupabaseUser()

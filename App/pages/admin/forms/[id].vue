@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSupabaseClient } from '#imports'
-import type { FormTemplate } from '~/types/form'
+import type { Database, Json } from '~/types/database'
+import type { FormField } from '~/types/form'
+import { useToast } from '~/composables/useToast'
+import FormBuilder from '~/components/form/FormBuilder.vue'
 
 definePageMeta({
   middleware: ['auth'],
@@ -11,7 +14,8 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
-const supabase = useSupabaseClient()
+const supabase = useSupabaseClient<Database>()
+const toast = useToast()
 
 // Ensure user is authenticated
 const { data: { user } } = await supabase.auth.getUser()
@@ -19,13 +23,17 @@ if (!user) throw createError({ statusCode: 401, message: 'Unauthorized' })
 
 const loading = ref(false)
 const error = ref<string | null>(null)
-const template = ref<FormTemplate>({
+const template = ref<Database['public']['Tables']['form_templates']['Row']>({
   id: route.params.id === 'new' ? crypto.randomUUID() : route.params.id as string,
   title: '',
-  description: '',
+  description: null,
+  schema: [],
+  type: 'job_application',
   is_active: true,
-  steps: [],
-  meta: {}
+  config: null,
+  created_at: new Date().toISOString(),
+  updated_at: null,
+  created_by: user.id
 })
 
 // Load template if editing
@@ -44,58 +52,30 @@ onMounted(async () => {
     
     if (templateError) throw templateError
 
-    // Load steps
-    const { data: stepsData, error: stepsError } = await supabase
-      .from('form_steps')
-      .select('*')
-      .eq('form_template_id', route.params.id)
-      .order('order_index', { ascending: true })
-    
-    if (stepsError) throw stepsError
-
-    // Load fields for each step
-    const steps = await Promise.all(stepsData.map(async (step) => {
-      const { data: fieldsData, error: fieldsError } = await supabase
-        .from('form_fields')
-        .select('*')
-        .eq('step_id', step.id)
-        .order('order_index', { ascending: true })
-      
-      if (fieldsError) throw fieldsError
-
-      return {
-        ...step,
-        id: step.id,
-        title: step.title,
-        description: step.description,
-        order: step.order_index,
-        fields: fieldsData.map(field => ({
-          ...field,
-          id: field.id,
-          type: field.type,
-          label: field.label,
-          description: field.description,
-          required: field.is_required,
-          order: field.order_index,
-          options: field.options,
-          validation: field.validation_rules,
-          conditions: field.condition_logic?.conditions || []
-        }))
+    if (templateData) {
+      const schemaFields = Array.isArray(templateData.schema) ? templateData.schema : []
+      template.value = {
+        ...templateData,
+        schema: schemaFields.map((field: any) => ({
+          id: field?.id || crypto.randomUUID(),
+          type: field?.type || 'text',
+          name: field?.name || '',
+          label: field?.label || '',
+          validation: field?.validation,
+          placeholder: field?.placeholder,
+          options: field?.options
+        })) as FormField[]
       }
-    }))
-
-    template.value = {
-      id: templateData.id,
-      title: templateData.title,
-      description: templateData.description,
-      is_active: templateData.is_active,
-      steps,
-      meta: templateData.meta
     }
   } catch (err) {
     const e = err as Error
     console.error('Error loading template:', e)
     error.value = e.message
+    toast.add({
+      title: 'Error',
+      description: 'Failed to load template',
+      type: 'error'
+    })
   } finally {
     loading.value = false
   }
@@ -105,67 +85,40 @@ const handleSave = async () => {
   try {
     loading.value = true
 
+    const templateData: Database['public']['Tables']['form_templates']['Insert'] = {
+      id: template.value.id,
+      title: template.value.title,
+      description: template.value.description,
+      schema: template.value.schema as unknown as Json,
+      type: template.value.type,
+      is_active: template.value.is_active,
+      config: template.value.config,
+      created_by: user.id
+    }
+
     // Save template
     const { error: templateError } = await supabase
       .from('form_templates')
-      .upsert({
-        id: template.value.id,
-        title: template.value.title,
-        description: template.value.description,
-        is_active: template.value.is_active,
-        meta: template.value.meta,
-        created_by: user.id
-      })
+      .upsert(templateData)
     
     if (templateError) throw templateError
 
-    // Save steps
-    for (const [index, step] of template.value.steps.entries()) {
-      // Save step
-      const { data: savedStep, error: stepError } = await supabase
-        .from('form_steps')
-        .upsert({
-          id: step.id,
-          form_template_id: template.value.id,
-          title: step.title,
-          description: step.description,
-          order_index: index,
-          is_conditional: step.conditions?.length > 0 || false,
-          condition_logic: step.conditions ? { conditions: step.conditions } : {}
-        })
-        .select()
-        .single()
-      
-      if (stepError) throw stepError
-
-      // Save fields
-      for (const [fieldIndex, field] of step.fields.entries()) {
-        const { error: fieldError } = await supabase
-          .from('form_fields')
-          .upsert({
-            id: field.id,
-            step_id: savedStep.id,
-            type: field.type,
-            label: field.label,
-            description: field.description,
-            order_index: fieldIndex,
-            is_required: field.required,
-            is_conditional: field.conditions?.length > 0 || false,
-            condition_logic: field.conditions ? { conditions: field.conditions } : {},
-            options: field.options || {},
-            validation_rules: field.validation || { type: 'none' },
-            ui_options: {}
-          })
-        
-        if (fieldError) throw fieldError
-      }
-    }
+    toast.add({
+      title: 'Success',
+      description: 'Template saved successfully',
+      type: 'success'
+    })
 
     router.push('/admin/forms')
   } catch (err) {
     const e = err as Error
     console.error('Error saving template:', e)
     error.value = e.message
+    toast.add({
+      title: 'Error',
+      description: 'Failed to save template',
+      type: 'error'
+    })
   } finally {
     loading.value = false
   }
@@ -195,6 +148,7 @@ const handleCancel = () => {
           class="btn btn-primary"
           :disabled="loading"
         >
+          <span v-if="loading" class="loading loading-spinner loading-xs"></span>
           {{ loading ? 'Saving...' : 'Save Template' }}
         </button>
       </div>
@@ -210,9 +164,9 @@ const handleCancel = () => {
       <span class="loading loading-spinner loading-lg"></span>
     </div>
 
-    <div v-else>
+    <div v-else class="space-y-6">
       <!-- Template Settings -->
-      <div class="card bg-base-100 shadow-xl mb-6">
+      <div class="card bg-base-100 shadow-xl">
         <div class="card-body">
           <h2 class="card-title mb-4">Template Settings</h2>
           
@@ -253,10 +207,12 @@ const handleCancel = () => {
       </div>
 
       <!-- Form Builder -->
-      <JobFormBuilder
-        v-model="template.steps"
-        :metadata="template.meta || {}"
-      />
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title mb-4">Form Fields</h2>
+          <FormBuilder v-model="template.schema" />
+        </div>
+      </div>
     </div>
   </div>
 </template> 

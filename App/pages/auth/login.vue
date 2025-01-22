@@ -1,42 +1,101 @@
-<script setup>
-import { useSupabaseStore } from '~/composables/useSupabaseStore'
+<script setup lang="ts">
+import type { Database } from '~/types/database'
 
 definePageMeta({
-  middleware: ['auth'],
-  requiresAuth: false 
-})
-
-const store = useSupabaseStore()
-const router = useRouter()
-
-const activeTab = ref('login')
-const email = ref("")
-const password = ref("") 
-const errorMsg = ref(null)
-const successMsg = ref(null)
-
-const isLoading = computed(() => store.auth.value.isLoading)
-const authError = computed(() => store.auth.value.error)
-
-watch(authError, (newError) => {
-  if (newError) {
-    errorMsg.value = newError
+  auth: {
+    unauthenticatedOnly: true,
+    navigateAuthenticatedTo: '/dashboard'
   }
 })
 
-async function handleSubmit() {
+// State
+const client = useSupabaseClient<Database>()
+const route = useRoute()
+const activeTab = ref('login')
+const email = ref("")
+const password = ref("") 
+const errorMsg = ref<string | null>(null)
+const successMsg = ref<string | null>(null)
+const isLoading = ref(false)
+
+// Methods
+const handleLogin = async () => {
   try {
+    isLoading.value = true
+    errorMsg.value = null
+
+    const { error } = await client.auth.signInWithPassword({
+      email: email.value,
+      password: password.value
+    })
+
+    if (error) throw error
+
+    // Navigate to redirect URL or dashboard
+    const redirectTo = route.query.redirect as string
+    await navigateTo(redirectTo || '/dashboard')
+  } catch (err) {
+    console.error('Login error:', err)
+    errorMsg.value = 'Invalid email or password'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const handleRegister = async () => {
+  try {
+    const { data: { user: newUser }, error } = await client.auth.signUp({
+      email: email.value,
+      password: password.value
+    })
+    if (error) throw error
+    
+    if (newUser?.id && newUser?.email) {
+      // Create user profile
+      const { error: profileError } = await client
+        .from('user_profiles')
+        .insert({
+          id: newUser.id,
+          email: newUser.email,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+      if (profileError) throw profileError
+
+      // Check if this is the first user
+      const { count } = await client
+        .from('user_roles')
+        .select('*', { count: 'exact', head: true })
+
+      // Create user role - first user becomes admin
+      const { error: roleError } = await client
+        .from('user_roles')
+        .insert({
+          user_id: newUser.id,
+          role: count === 0 ? 'admin' : 'applicant'
+        })
+      if (roleError) throw roleError
+
+      successMsg.value = "Please confirm your account via email"
+    }
+  } catch (error: any) {
+    errorMsg.value = error.message || 'An error occurred during registration'
+  }
+}
+
+const handleSubmit = async () => {
+  try {
+    isLoading.value = true
     errorMsg.value = null
     successMsg.value = null
     
     if (activeTab.value === 'login') {
-      await store.login(email.value, password.value)
+      await handleLogin()
     } else {
-      await store.register(email.value, password.value)
-      successMsg.value = "Please confirm your account via email"
+      await handleRegister()
     }
-  } catch (error) {
-    errorMsg.value = error.message
+  } finally {
+    isLoading.value = false
   }
 }
 </script>
@@ -45,64 +104,63 @@ async function handleSubmit() {
   <div class="flex justify-center">
     <div class="w-full max-w-md p-8 space-y-6 rounded-xl bg-base-300 shadow-md">
       <!-- Tab Navigation -->
-      <div class="flex border-b">
-        <button 
+      <div class="tabs tabs-boxed">
+        <a 
+          :class="['tab', { 'tab-active': activeTab === 'login' }]"
           @click="activeTab = 'login'"
-          class="px-6 py-2 -mb-px"
-          :class="[
-            activeTab === 'login' 
-              ? 'border-b-2 border-primary text-primary font-medium'
-              : 'text-base-content/70 hover:text-primary'
-          ]"
-          :disabled="isLoading"
         >
           Login
-        </button>
-        <button 
+        </a>
+        <a 
+          :class="['tab', { 'tab-active': activeTab === 'register' }]"
           @click="activeTab = 'register'"
-          class="px-6 py-2 -mb-px"
-          :class="[
-            activeTab === 'register' 
-              ? 'border-b-2 border-primary text-primary font-medium'
-              : 'text-base-content/70 hover:text-primary'
-          ]"
-          :disabled="isLoading"
         >
           Register
-        </button>
+        </a>
       </div>
 
-      <h3 v-if="errorMsg" class="text-error">{{ errorMsg }}</h3>
-      <h3 v-if="successMsg" class="text-success">{{ successMsg }}</h3>
-
-      <form class="space-y-6" @submit.prevent="handleSubmit">
-        <div>
-          <label for="email" class="text-sm font-semibold">Email</label>
+      <!-- Form -->
+      <form @submit.prevent="handleSubmit" class="space-y-6">
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">Email</span>
+          </label>
           <input 
-            type="email" 
-            id="email" 
             v-model="email"
-            :disabled="isLoading"
-            class="w-full p-2 mt-1 border rounded-md focus:border-primary focus:outline-none focus:ring focus:ring-primary" 
+            type="email" 
+            placeholder="email@example.com"
+            class="input input-bordered w-full" 
+            required
           />
         </div>
-        <div>
-          <label for="password" class="text-sm font-semibold">Password</label>
+
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">Password</span>
+          </label>
           <input 
-            type="password" 
-            id="password" 
             v-model="password"
-            :disabled="isLoading"
-            class="w-full p-2 mt-1 border rounded-md focus:border-primary focus:outline-none focus:ring focus:ring-primary" 
+            type="password"
+            class="input input-bordered w-full"
+            required
           />
         </div>
+
+        <div v-if="errorMsg" class="alert alert-error">
+          {{ errorMsg }}
+        </div>
+
+        <div v-if="successMsg" class="alert alert-success">
+          {{ successMsg }}
+        </div>
+
         <button 
-          type="submit"
-          class="w-full py-2 bg-primary text-primary-content rounded-md hover:bg-primary-focus focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50"
+          type="submit" 
+          class="btn btn-primary w-full"
+          :class="{ 'loading': isLoading }"
           :disabled="isLoading"
         >
-          <span v-if="isLoading" class="loading loading-spinner loading-sm"></span>
-          <span v-else>{{ activeTab === 'login' ? 'Login' : 'Register' }}</span>
+          {{ activeTab === 'login' ? 'Sign In' : 'Sign Up' }}
         </button>
       </form>
     </div>

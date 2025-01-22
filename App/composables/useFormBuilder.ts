@@ -1,171 +1,88 @@
-import type { FormTemplate, FormStep, FormField } from '~/types/form'
+import { ref } from 'vue'
+import { useSupabaseClient } from '#imports'
 import type { Database } from '~/types/database'
+import type { FormTemplate, FormField } from '~/types/form'
+import type { Json } from '~/types/database'
 
-export const useFormBuilder = () => {
-  const supabase = useSupabaseClient<Database>()
-  const templates = ref<FormTemplate[]>([])
-  const currentTemplate = ref<FormTemplate | null>(null)
+export function useFormBuilder() {
+  const client = useSupabaseClient<Database>()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // Load form templates
-  const loadTemplates = async () => {
+  const saveTemplate = async (templateData: FormTemplate, fields: FormField[]) => {
     try {
       loading.value = true
-      const { data, error: err } = await supabase
-        .from('form_templates')
-        .select(`
-          id,
-          title,
-          description,
-          is_active,
-          meta,
-          form_steps (
-            id,
-            title,
-            description,
-            order_index,
-            is_conditional,
-            condition_logic,
-            form_fields (
-              id,
-              type,
-              label,
-              description,
-              order_index,
-              is_required,
-              is_conditional,
-              condition_logic,
-              options,
-              validation_rules,
-              ui_options
-            )
-          )
-        `)
-        .order('created_at', { ascending: false })
+      error.value = null
 
-      if (err) throw err
-
-      templates.value = data.map(template => ({
-        ...template,
-        steps: template.form_steps.map(step => ({
-          ...step,
-          orderIndex: step.order_index,
-          isConditional: step.is_conditional,
-          conditionLogic: step.condition_logic,
-          fields: step.form_fields.map(field => ({
-            ...field,
-            orderIndex: field.order_index,
-            required: field.is_required,
-            isConditional: field.is_conditional,
-            conditionLogic: field.condition_logic,
-            options: field.ui_options
-          }))
-        }))
-      }))
-    } catch (err) {
-      error.value = err.message
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // Save form template
-  const saveTemplate = async (template: FormTemplate) => {
-    try {
-      loading.value = true
-      
-      // Insert/update template
-      const { data: templateData, error: templateError } = await supabase
+      // Save the template with the fields in the schema
+      const { error: templateError } = await client
         .from('form_templates')
         .upsert({
-          id: template.id,
-          title: template.title,
-          description: template.description,
-          is_active: template.isActive,
-          meta: template.meta
+          id: templateData.id,
+          title: templateData.title,
+          description: templateData.description,
+          type: templateData.type,
+          is_active: templateData.is_active,
+          schema: fields as unknown as Json,
+          config: templateData.config || {},
+          created_by: templateData.created_by,
+          updated_at: new Date().toISOString()
         })
-        .select()
-        .single()
 
       if (templateError) throw templateError
 
-      // Save steps and fields
-      for (const step of template.steps) {
-        const { data: stepData, error: stepError } = await supabase
-          .from('form_steps')
-          .upsert({
-            id: step.id,
-            form_template_id: templateData.id,
-            title: step.title,
-            description: step.description,
-            order_index: step.orderIndex,
-            is_conditional: step.isConditional,
-            condition_logic: step.conditionLogic
-          })
-          .select()
-          .single()
-
-        if (stepError) throw stepError
-
-        // Save fields
-        for (const field of step.fields) {
-          const { error: fieldError } = await supabase
-            .from('form_fields')
-            .upsert({
-              id: field.id,
-              step_id: stepData.id,
-              type: field.type,
-              label: field.label,
-              description: field.description,
-              order_index: field.orderIndex,
-              is_required: field.required,
-              is_conditional: field.isConditional,
-              condition_logic: field.conditionLogic,
-              options: field.options,
-              validation_rules: field.validation,
-              ui_options: field.options
-            })
-
-          if (fieldError) throw fieldError
-        }
-      }
-
-      await loadTemplates()
+      return templateData.id
     } catch (err) {
-      error.value = err.message
-      throw err
+      error.value = err instanceof Error ? err.message : 'Failed to save template'
+      throw error.value
     } finally {
       loading.value = false
     }
   }
 
-  // Delete template
-  const deleteTemplate = async (templateId: string) => {
+  const loadTemplate = async (templateId: string): Promise<FormTemplate> => {
     try {
       loading.value = true
-      const { error: err } = await supabase
-        .from('form_templates')
-        .delete()
-        .eq('id', templateId)
+      error.value = null
 
-      if (err) throw err
-      await loadTemplates()
+      const { data: template, error: templateError } = await client
+        .from('form_templates')
+        .select('*')
+        .eq('id', templateId)
+        .single()
+
+      if (templateError) throw templateError
+      if (!template) throw new Error('Template not found')
+
+      // Cast the schema to FormField[] after verifying it's an array
+      const schema = Array.isArray(template.schema) 
+        ? (template.schema as Record<string, unknown>[]).map(field => ({
+            id: String(field.id || crypto.randomUUID()),
+            type: String(field.type || 'text'),
+            name: String(field.name || field.id || crypto.randomUUID()),
+            label: String(field.label || ''),
+            validation: field.validation as string | undefined,
+            placeholder: field.placeholder as string | undefined,
+            options: field.options as { label: string, value: string }[] | undefined
+          }))
+        : []
+
+      return {
+        ...template,
+        schema
+      }
     } catch (err) {
-      error.value = err.message
-      throw err
+      error.value = err instanceof Error ? err.message : 'Failed to load template'
+      throw error.value
     } finally {
       loading.value = false
     }
   }
 
   return {
-    templates,
-    currentTemplate,
     loading,
     error,
-    loadTemplates,
     saveTemplate,
-    deleteTemplate
+    loadTemplate
   }
 } 

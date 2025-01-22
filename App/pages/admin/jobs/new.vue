@@ -1,74 +1,101 @@
-// pages/admin/jobs/new.vue
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useSupabaseClient } from '#imports'
+import { useRouter } from 'vue-router'
+import { useSupabaseClient, useSupabaseUser } from '#imports'
+import { useToast } from '~/composables/useToast'
 import type { Database } from '~/types/database'
-import type { Job } from '~/types/jobs'
-import JobFormBuilder from '~/components/jobs/JobFormBuilder.vue'
+import type { Job, FormField } from '~/types/form'
+import type { Json } from '~/types/database'
 import JobMetadataForm from '~/components/jobs/JobMetadataForm.vue'
+import JobDetailsForm from '~/components/jobs/JobDetailsForm.vue'
+import FormBuilder from '~/components/form/FormBuilder.vue'
 
-definePageMeta({
-  layout: 'admin',
-  middleware: ['auth']
-})
-
-const supabase = useSupabaseClient<Database>()
 const router = useRouter()
+const client = useSupabaseClient<Database>()
+const currentUser = useSupabaseUser()
+const toast = useToast()
+
 const loading = ref(false)
 const error = ref<string | null>(null)
 
-// Initialize job with default values
+// Initialize new job with default values
 const job = ref<Job>({
+  id: '',
   title: '',
-  description: '',
-  department: '',
-  location: '',
+  description: null,
+  location: null,
   status: 'draft',
-  job_details: {
-    requirements: [],
-    responsibilities: [],
-    salary_range: ''
-  },
-  meta: {},
-  application_steps: [{
-    id: crypto.randomUUID(),
-    title: 'Application Form',
-    description: '',
-    order: 1,
-    fields: []
-  }]
+  tasks: null,
+  requirements: null,
+  benefits: null,
+  form_id: null,
+  created_at: null,
+  updated_at: null,
+  created_by: null
 })
+
+const formSchema = ref<FormField[]>([])
+
+const saveForm = async (fields: FormField[]): Promise<string> => {
+  const { data: form, error } = await client
+    .from('forms')
+    .insert({
+      title: job.value.title + ' Application Form',
+      description: 'Application form for ' + job.value.title,
+      schema: fields as unknown as Json,
+      type: 'job_application',
+      config: {},
+      created_by: currentUser.value?.id
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return form.id
+}
 
 const saveJob = async () => {
   try {
+    console.log('=== Starting Job Save Process ===')
+    console.log('Current job data:', job.value)
+    console.log('Current form schema:', formSchema.value)
+    console.log('Current user:', currentUser.value)
+    
     loading.value = true
-    error.value = null
-
-    const jobData = {
-      title: job.value.title,
-      description: job.value.description,
-      department: job.value.department,
-      location: job.value.location,
-      status: job.value.status,
-      job_details: job.value.job_details,
-      meta: job.value.meta,
-      application_steps: job.value.application_steps,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }
-
-    const { data, error: saveError } = await supabase
+    
+    // First create the form
+    const formId = await saveForm(formSchema.value)
+    
+    // Then save the job with the form ID, omitting the empty id field
+    const { error } = await client
       .from('jobs')
-      .insert(jobData)
-      .select()
-      .single()
+      .insert({
+        ...job.value,
+        id: undefined, // Remove empty id so Postgres can generate one
+        form_id: formId,
+        updated_at: new Date().toISOString()
+      })
 
-    if (saveError) throw saveError
+    if (error) throw error
+    
+    toast.add({
+      title: 'Success',
+      description: 'Job listing saved successfully',
+      type: 'success'
+    })
 
+    console.log('=== Job Save Process Completed Successfully ===')
+    
+    // Redirect after successful save
     router.push('/admin/jobs')
-  } catch (e: any) {
-    error.value = e.message
-    console.error('Error saving job:', e)
+  } catch (err) {
+    console.error('=== Job Save Process Failed ===')
+    console.error('Error details:', err)
+    toast.add({
+      title: 'Error',
+      description: err instanceof Error ? err.message : 'Failed to save job listing',
+      type: 'error'
+    })
   } finally {
     loading.value = false
   }
@@ -79,35 +106,38 @@ const saveJob = async () => {
   <div class="container mx-auto p-4">
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold">Create New Job</h1>
-      <NuxtLink to="/admin/jobs" class="btn btn-ghost">
-        Back
-      </NuxtLink>
-    </div>
-
-    <form @submit.prevent="saveJob" class="space-y-6">
-      <!-- Job Metadata -->
-      <JobMetadataForm v-model="job" />
-
-      <!-- Application Steps -->
-      <div class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-          <h2 class="card-title mb-4">Application Process</h2>
-          <JobFormBuilder v-model="job.application_steps" />
-        </div>
-      </div>
-
-      <!-- Save Actions -->
-      <div class="flex justify-end gap-4">
-        <NuxtLink to="/admin/jobs" class="btn">Cancel</NuxtLink>
-        <button type="submit" class="btn btn-primary" :disabled="loading">
-          <i v-if="loading" class="fas fa-spinner fa-spin mr-2"></i>
+      <div class="flex gap-2">
+        <button 
+          class="btn btn-primary"
+          :disabled="loading"
+          @click="saveJob"
+        >
+          <span v-if="loading" class="loading loading-spinner loading-xs"></span>
           Create Job
         </button>
       </div>
+    </div>
 
-      <div v-if="error" class="alert alert-error">
-        {{ error }}
+    <!-- Error State -->
+    <div v-if="error" class="alert alert-error mb-4">
+      {{ error }}
+    </div>
+
+    <!-- Form -->
+    <div class="space-y-6">
+      <!-- Basic Information -->
+      <JobMetadataForm v-model="job" />
+
+      <!-- Job Details -->
+      <JobDetailsForm v-model="job" />
+
+      <!-- Form Builder -->
+      <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+          <h2 class="card-title mb-4">Application Form</h2>
+          <FormBuilder v-model="formSchema" />
+        </div>
       </div>
-    </form>
+    </div>
   </div>
 </template>

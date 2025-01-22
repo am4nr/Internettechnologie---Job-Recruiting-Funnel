@@ -1,45 +1,105 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useSupabaseStore } from '~/composables/useSupabaseStore'
-import type { UserWithRole } from '~/types/auth'
+import { useAuthStore } from '~/stores/auth'
+import { useSupabaseClient } from '#imports'
+import type { Database } from '~/types/database'
+
+type Role = 'admin' | 'recruiter' | 'applicant'
+
+interface UserWithRole {
+  id: string
+  email: string
+  first_name: string | null
+  last_name: string | null
+  created_at: string | null
+  role: Role
+  permissions: string[]
+}
 
 definePageMeta({
   layout: 'admin',
   middleware: ['auth']
 })
 
-const store = useSupabaseStore()
+const client = useSupabaseClient<Database>()
+const authStore = useAuthStore()
 const loading = ref(false)
 const error = ref<string | null>(null)
 const users = ref<UserWithRole[]>([])
 
-// Load users on page mount
-onMounted(async () => {
-  loading.value = true
+const fetchUsers = async () => {
   try {
-    const { data, error: fetchError } = await store.fetchUsers()
-    if (fetchError) throw fetchError
-    users.value = data || []
-  } catch (err: any) {
-    error.value = err.message
-    console.error('Error loading users:', err)
+    loading.value = true
+    const { data: profiles, error: profilesError } = await client
+      .from('user_profiles')
+      .select('id, email, first_name, last_name, created_at')
+      .order('created_at', { ascending: false })
+
+    if (profilesError) throw profilesError
+
+    const { data: userRoles, error: rolesError } = await client
+      .from('user_roles')
+      .select('user_id, role')
+
+    if (rolesError) throw rolesError
+
+    const { data: permissions, error: permissionsError } = await client
+      .from('role_permissions')
+      .select('role, permission')
+
+    if (permissionsError) throw permissionsError
+
+    users.value = profiles.map(profile => {
+      const userRole = (userRoles.find(r => r.user_id === profile.id)?.role || 'applicant') as Role
+      const userPermissions = permissions
+        .filter(p => p.role === userRole)
+        .map(p => p.permission)
+
+      return {
+        id: profile.id,
+        email: profile.email,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        created_at: profile.created_at,
+        role: userRole,
+        permissions: userPermissions
+      }
+    })
+  } catch (err) {
+    console.error('Error fetching users:', err)
+    error.value = 'Failed to load users'
   } finally {
     loading.value = false
   }
+}
+
+const updateUserRole = async (userId: string, newRole: Role) => {
+  try {
+    // First try to delete existing role
+    await client
+      .from('user_roles')
+      .delete()
+      .eq('user_id', userId)
+
+    // Then insert new role
+    const { error } = await client
+      .from('user_roles')
+      .insert({ user_id: userId, role: newRole })
+
+    if (error) throw error
+    await fetchUsers()
+  } catch (err) {
+    console.error('Error updating user role:', err)
+    error.value = 'Failed to update user role'
+  }
+}
+
+onMounted(async () => {
+  await fetchUsers()
 })
 
 // Available roles
-const availableRoles = ['admin', 'recruiter', 'applicant']
-
-// Update user role
-const updateRole = async (user: UserWithRole, newRole: string) => {
-  try {
-    await store.updateUserRole(user.id, newRole as any)
-  } catch (err: any) {
-    error.value = err.message
-    console.error('Error updating role:', err)
-  }
-}
+const availableRoles: Role[] = ['admin', 'recruiter', 'applicant']
 
 // Get user initials
 const getUserInitials = (user: UserWithRole) => {
@@ -47,6 +107,12 @@ const getUserInitials = (user: UserWithRole) => {
     return user.email.charAt(0).toUpperCase()
   }
   return `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase()
+}
+
+// Format date with fallback
+const formatDate = (date: string | null) => {
+  if (!date) return 'N/A'
+  return new Date(date).toLocaleDateString()
 }
 </script>
 
@@ -107,7 +173,7 @@ const getUserInitials = (user: UserWithRole) => {
                       <li v-for="role in availableRoles" :key="role">
                         <a 
                           :class="{ 'active': user.role === role }"
-                          @click="updateRole(user, role)"
+                          @click="updateUserRole(user.id, role)"
                         >
                           {{ role }}
                         </a>
@@ -115,7 +181,7 @@ const getUserInitials = (user: UserWithRole) => {
                     </ul>
                   </div>
                 </td>
-                <td class="text-sm">{{ new Date(user.created_at).toLocaleDateString() }}</td>
+                <td class="text-sm">{{ formatDate(user.created_at) }}</td>
               </tr>
             </tbody>
           </table>

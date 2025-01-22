@@ -7,27 +7,41 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "types:db": "npx supabase gen types typescript --project-id bbxhgmuwdihnoyhlgaqd > types/database.ts",
+    "supabase:migration:new": "npx supabase migration new",
+    "supabase:migration:up": "npx supabase migration up",
+    "supabase:migration:down": "npx supabase migration down",
+    "supabase:db:reset": "npx supabase db reset"
   },
   "dependencies": {
+    "@formkit/drag-and-drop": "^0.3.3",
+    "@formkit/themes": "^1.6.9",
+    "@formkit/vue": "^1.6.9",
     "@fortawesome/fontawesome-free": "^6.7.1",
     "@headlessui/tailwindcss": "^0.2.1",
     "@headlessui/vue": "^1.7.23",
     "@heroicons/vue": "^2.1.5",
     "@nuxtjs/supabase": "^1.4.1",
-    "@vueuse/core": "^11.2.0",
+    "@vueuse/core": "^11.3.0",
     "daisyui": "^4.12.14",
     "nuxt": "^3.13.0",
     "nuxt-nodemailer": "^1.1.2",
-    "vue": "latest",
-    "vue-router": "latest",
-    "vue3-lottie": "^3.3.1"
+    "vue": "^3.4.15",
+    "vue-draggable-next": "^2.2.1",
+    "vue-router": "^4.2.5",
+    "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
+    "@formkit/nuxt": "^1.6.9",
     "@nuxtjs/tailwindcss": "^6.12.2",
+    "@types/node": "^22.10.7",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
+    "supabase": "^2.6.8",
     "tailwindcss": "^3.4.13",
+    "typescript": "^5.7.3",
+    "vue-tsc": "^2.1.10",
     "vuedraggable": "^4.1.0"
   }
 }

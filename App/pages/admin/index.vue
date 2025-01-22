@@ -1,13 +1,46 @@
 <!-- pages/admin/index.vue -->
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useSupabaseClient } from '#imports'
+import { useAuthStore } from '~/stores/auth'
 import type { Database } from '~/types/database'
 
 definePageMeta({
   layout: 'admin',
   middleware: ['auth']
 })
+
+// Initialize stores
+const authStore = useAuthStore()
+
+// Compute permissions for different sections
+const hasAdminPerms = computed(() => authStore.hasPermissions(['roles.read_all', 'roles.update_all']))
+const hasJobManagementPerms = computed(() => authStore.hasPermissions([
+  'jobs.create',
+  'applications.read_all',
+  'applications.change_status',
+  'forms.read_all'
+]))
+
+interface ActivityItem {
+  id: string
+  type: 'Job' | 'Application' | 'Status Change'
+  description: string
+  user_email: string | null
+  created_at: string
+}
+
+interface ApplicationWithRelations {
+  id: string
+  status: Database['public']['Enums']['app_application_status']
+  created_at: string
+  user_profiles: {
+    email: string
+  }[] | null
+  jobs: {
+    title: string
+  }[] | null
+}
 
 // Initialize Supabase client
 const supabase = useSupabaseClient<Database>()
@@ -24,100 +57,27 @@ const stats = ref({
 // Activity state
 const loadingActivity = ref(false)
 const activityError = ref<string | null>(null)
-const recentActivity = ref<any[]>([])
-
-interface Job {
-  id: string
-  title: string
-  created_at: string
-  created_by: string
-}
-
-interface Application {
-  id: string
-  position: string
-  created_at: string
-  user_id: string
-}
+const recentActivity = ref<ActivityItem[]>([])
 
 // Fetch recent activity
 const fetchRecentActivity = async () => {
   loadingActivity.value = true
+  activityError.value = null
+
   try {
-    // Fetch recent job postings
-    const { data: jobs, error: jobsError } = await supabase
-      .from('jobs')
-      .select(`
-        id,
-        title,
-        created_at,
-        created_by
-      `)
-      .order('created_at', { ascending: false })
-      .limit(5)
+    const { data, error } = await supabase
+      .rpc('get_admin_activity')
 
-    if (jobsError) throw jobsError
+    if (error) throw error
 
-    // Get user profiles for jobs
-    const jobUserIds = jobs?.map(job => job.created_by).filter(Boolean) || []
-    const { data: jobUsers } = await supabase
-      .from('user_profiles')
-      .select('id, email')
-      .in('id', jobUserIds)
-
-    const jobUsersMap = new Map(jobUsers?.map(user => [user.id, user]) || [])
-
-    // Fetch recent applications
-    const { data: applications, error: appsError } = await supabase
-      .from('applications')
-      .select(`
-        id,
-        position,
-        created_at,
-        user_id
-      `)
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    if (appsError) throw appsError
-
-    // Get user profiles for applications
-    const appUserIds = applications?.map(app => app.user_id).filter(Boolean) || []
-    const { data: appUsers } = await supabase
-      .from('user_profiles')
-      .select('id, email')
-      .in('id', appUserIds)
-
-    const appUsersMap = new Map(appUsers?.map(user => [user.id, user]) || [])
-
-    // Combine and format activity
-    const activity = [
-      ...(jobs?.map(job => ({
-        id: `job-${job.id}`,
-        type: 'Job',
-        description: `New job posted: ${job.title}`,
-        user: job.created_by ? { email: jobUsersMap.get(job.created_by)?.email } : null,
-        created_at: job.created_at
-      })) || []),
-      ...(applications?.map(app => ({
-        id: `app-${app.id}`,
-        type: 'Application',
-        description: `New application received for ${app.position}`,
-        user: app.user_id ? { email: appUsersMap.get(app.user_id)?.email } : null,
-        created_at: app.created_at
-      })) || [])
-    ]
-
-    // Sort by date
-    activity.sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
-
-    // Take most recent 10
-    recentActivity.value = activity.slice(0, 10)
-  } catch (err: any) {
-    console.error('Error fetching activity:', err)
-    activityError.value = err.message
+    // Cast the response to the correct type
+    recentActivity.value = (data as ActivityItem[]).map(item => ({
+      ...item,
+      type: item.type as 'Job' | 'Application' | 'Status Change'
+    }))
+  } catch (err) {
+    console.error('Error fetching recent activity:', err)
+    activityError.value = 'Failed to load recent activity'
   } finally {
     loadingActivity.value = false
   }
@@ -136,8 +96,47 @@ const formatDate = (date: string) => {
   }
 }
 
+// Fetch dashboard stats
+const fetchStats = async () => {
+  loading.value = true
+  try {
+    // Get total users
+    if (hasAdminPerms.value) {
+      const { count: userCount } = await supabase
+        .from('user_profiles')
+        .select('*', { count: 'exact', head: true })
+      stats.value.users = userCount || 0
+    }
+
+    // Get total jobs
+    const { count: jobCount } = await supabase
+      .from('jobs')
+      .select('*', { count: 'exact', head: true })
+    stats.value.jobs = jobCount || 0
+
+    // Get active jobs
+    const { count: activeJobCount } = await supabase
+      .from('jobs')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'published')
+    stats.value.activeJobs = activeJobCount || 0
+
+    // Get total applications
+    const { count: applicationCount } = await supabase
+      .from('applications')
+      .select('*', { count: 'exact', head: true })
+    stats.value.applications = applicationCount || 0
+
+  } catch (err) {
+    console.error('Error fetching dashboard stats:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
 // Fetch data on mount
 onMounted(() => {
+  fetchStats()
   fetchRecentActivity()
 })
 </script>
@@ -155,51 +154,62 @@ onMounted(() => {
     <div class="flex-1 overflow-auto">
       <!-- Stats Overview -->
       <div class="grid grid-cols-4 gap-4 p-6">
-        <div class="flex items-center gap-3">
-          <div class="text-4xl font-bold text-primary">3</div>
-          <div>
-            <div class="text-sm opacity-50">Total Users</div>
-            <div class="flex items-center gap-2">
-              <i class="fas fa-users text-primary"></i>
+        <template v-if="loading">
+          <div v-for="i in 4" :key="i" class="flex items-center gap-3">
+            <div class="loading loading-spinner loading-lg"></div>
+          </div>
+        </template>
+        <template v-else>
+          <!-- Show user stats only for admins -->
+          <div v-if="hasAdminPerms" class="flex items-center gap-3">
+            <div class="text-4xl font-bold text-primary">{{ stats.users }}</div>
+            <div>
+              <div class="text-sm opacity-50">Total Users</div>
+              <div class="flex items-center gap-2">
+                <i class="fas fa-users text-primary"></i>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="flex items-center gap-3">
-          <div class="text-4xl font-bold text-success">0</div>
-          <div>
-            <div class="text-sm opacity-50">Total Jobs</div>
-            <div class="flex items-center gap-2">
-              <i class="fas fa-briefcase text-success"></i>
+          <!-- Job-related stats for admins and recruiters -->
+          <template v-if="hasJobManagementPerms || hasAdminPerms">
+            <div class="flex items-center gap-3">
+              <div class="text-4xl font-bold text-success">{{ stats.jobs }}</div>
+              <div>
+                <div class="text-sm opacity-50">Total Jobs</div>
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-briefcase text-success"></i>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div class="flex items-center gap-3">
-          <div class="text-4xl font-bold text-warning">0</div>
-          <div>
-            <div class="text-sm opacity-50">Active Jobs</div>
-            <div class="flex items-center gap-2">
-              <i class="fas fa-check-circle text-warning"></i>
+            <div class="flex items-center gap-3">
+              <div class="text-4xl font-bold text-warning">{{ stats.activeJobs }}</div>
+              <div>
+                <div class="text-sm opacity-50">Active Jobs</div>
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-check-circle text-warning"></i>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div class="flex items-center gap-3">
-          <div class="text-4xl font-bold text-secondary">1</div>
-          <div>
-            <div class="text-sm opacity-50">Applications</div>
-            <div class="flex items-center gap-2">
-              <i class="fas fa-file-alt text-secondary"></i>
+            <div class="flex items-center gap-3">
+              <div class="text-4xl font-bold text-secondary">{{ stats.applications }}</div>
+              <div>
+                <div class="text-sm opacity-50">Applications</div>
+                <div class="flex items-center gap-2">
+                  <i class="fas fa-file-alt text-secondary"></i>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </template>
+        </template>
       </div>
 
       <!-- Quick Actions -->
       <div class="grid grid-cols-3 gap-6 p-6">
-        <!-- User Management -->
-        <div class="bg-primary/10 rounded-lg p-6">
+        <!-- User Management - Admin only -->
+        <div v-if="hasAdminPerms" class="bg-primary/10 rounded-lg p-6">
           <div class="flex items-center gap-3 mb-4">
             <i class="fas fa-users text-2xl text-primary"></i>
             <h2 class="text-xl font-bold">User Management</h2>
@@ -210,8 +220,8 @@ onMounted(() => {
           </NuxtLink>
         </div>
 
-        <!-- Jobs -->
-        <div class="bg-success/10 rounded-lg p-6">
+        <!-- Jobs - Available to both -->
+        <div v-if="hasJobManagementPerms || hasAdminPerms" class="bg-success/10 rounded-lg p-6">
           <div class="flex items-center gap-3 mb-4">
             <i class="fas fa-briefcase text-2xl text-success"></i>
             <h2 class="text-xl font-bold">Jobs</h2>
@@ -222,8 +232,8 @@ onMounted(() => {
           </NuxtLink>
         </div>
 
-        <!-- Forms -->
-        <div class="bg-secondary/10 rounded-lg p-6">
+        <!-- Forms - Available to both -->
+        <div v-if="hasJobManagementPerms || hasAdminPerms" class="bg-secondary/10 rounded-lg p-6">
           <div class="flex items-center gap-3 mb-4">
             <i class="fas fa-file-lines text-2xl text-secondary"></i>
             <h2 class="text-xl font-bold">Forms</h2>
@@ -258,11 +268,19 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="activity in recentActivity" :key="activity.id">
-                <td>{{ activity.type }}</td>
-                <td>{{ activity.description }}</td>
-                <td>{{ activity.user?.email }}</td>
-                <td>{{ formatDate(activity.created_at) }}</td>
+              <tr v-for="item in recentActivity" :key="item.id">
+                <td>
+                  <div class="badge" :class="{
+                    'badge-primary': item.type === 'Job',
+                    'badge-success': item.type === 'Application',
+                    'badge-warning': item.type === 'Status Change'
+                  }">
+                    {{ item.type }}
+                  </div>
+                </td>
+                <td>{{ item.description }}</td>
+                <td>{{ item.user_email || 'N/A' }}</td>
+                <td>{{ formatDate(item.created_at) }}</td>
               </tr>
             </tbody>
           </table>

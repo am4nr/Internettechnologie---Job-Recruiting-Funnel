@@ -1,575 +1,329 @@
-<!-- components/form/FormBuilder.vue -->
 <script setup lang="ts">
-import type { FormTemplate, FormStep, FormField } from '~/types/form'
-import draggable from 'vuedraggable'
-import BaseFormField from './FormField.vue'
-import FormPreview from './FormPreview.vue'
+import { ref, computed, onMounted } from 'vue'
+import type { FormField, FormTemplate } from '~/types/form'
+import { useFormTemplates } from '~/composables/useFormTemplates'
+import { useToast } from '~/composables/useToast'
 
 const props = defineProps<{
-  modelValue: FormTemplate
+  modelValue: FormField[]
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: FormTemplate]
+  'update:modelValue': [value: FormField[]]
 }>()
 
-const { loading, error, saveTemplate } = useFormBuilder()
-const activeStep = ref(0)
+const { getTemplates } = useFormTemplates()
+const toast = useToast()
 
-const addStep = () => {
-  const newTemplate = { ...props.modelValue }
-  newTemplate.steps.push({
-    id: crypto.randomUUID(),
-    title: 'New Step',
-    description: '',
-    orderIndex: newTemplate.steps.length + 1,
-    fields: []
-  })
-  emit('update:modelValue', newTemplate)
-  activeStep.value = newTemplate.steps.length - 1
-}
+const templates = ref<FormTemplate[]>([])
+const isLoading = ref(true)
+const error = ref<string | null>(null)
 
-const removeStep = (index: number) => {
-  if (props.modelValue.steps.length === 1) return
-  const newTemplate = { ...props.modelValue }
-  newTemplate.steps.splice(index, 1)
-  emit('update:modelValue', newTemplate)
-  if (activeStep.value >= newTemplate.steps.length) {
-    activeStep.value = newTemplate.steps.length - 1
+// Load active templates
+const loadTemplates = async () => {
+  try {
+    isLoading.value = true
+    error.value = null
+    
+    const result = await getTemplates({
+      page_size: 100, // Load more templates since we're only showing active ones
+      template_type: 'job_application'
+    })
+    
+    // Filter for active templates only
+    templates.value = result.data.filter(t => t.is_active)
+  } catch (err) {
+    console.error('Error loading templates:', err)
+    error.value = err instanceof Error ? err.message : 'Failed to load templates'
+    toast.add({
+      title: 'Error',
+      description: error.value,
+      type: 'error'
+    })
+  } finally {
+    isLoading.value = false
   }
 }
 
-const editingField = ref<FormField | null>(null)
-const configTab = ref('options')
-const isDraggingOver = ref(false)
-const isPreviewMode = ref(false)
+const addTemplate = (templateId: string) => {
+  const template = templates.value.find(t => t.id === templateId)
+  if (template) {
+    const newFields = [...props.modelValue, ...template.schema]
+    emit('update:modelValue', newFields)
+  }
+}
 
-// Field type registration
+// Load templates on mount
+onMounted(loadTemplates)
+
+const removeField = (fieldId: string) => {
+  const newFields = props.modelValue.filter(field => field.id !== fieldId)
+  emit('update:modelValue', newFields)
+}
+
 const fieldTypes = [
-  { value: 'text', component: 'TextField', label: 'Text Input', icon: 'fa-keyboard', isTemplate: true },
-  { value: 'textarea', component: 'TextareaField', label: 'Text Area', icon: 'fa-paragraph', isTemplate: true },
-  { value: 'select', component: 'SelectField', label: 'Select', icon: 'fa-list', isTemplate: true },
-  { value: 'checkbox', component: 'CheckboxField', label: 'Checkbox', icon: 'fa-check-square', isTemplate: true },
-  { value: 'radio', component: 'RadioField', label: 'Radio', icon: 'fa-circle', isTemplate: true },
-  { value: 'file', component: 'FileField', label: 'File Upload', icon: 'fa-upload', isTemplate: true },
-  { value: 'range', component: 'RangeField', label: 'Range', icon: 'fa-sliders-h', isTemplate: true },
-  { value: 'rating', component: 'RatingField', label: 'Rating', icon: 'fa-star', isTemplate: true },
-  { value: 'toggle', component: 'ToggleField', label: 'Toggle', icon: 'fa-toggle-on', isTemplate: true }
+  { value: 'text', label: 'Text' },
+  { value: 'textarea', label: 'Text Area' },
+  { value: 'email', label: 'Email' },
+  { value: 'tel', label: 'Phone' },
+  { value: 'number', label: 'Number' },
+  { value: 'select', label: 'Select' }
 ]
 
-const handleDragStart = () => {
-  isDraggingOver.value = true
+const validationRules = [
+  { value: 'required', label: 'Required' },
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Phone' }
+]
+
+const editingField = ref<FormField | null>(null)
+const showFieldEditor = ref(false)
+
+const parseOptions = (optionsText: string): { label: string, value: string }[] => {
+  return optionsText.split('\n')
+    .map(line => line.trim())
+    .filter(line => line.includes('='))
+    .map(line => {
+      const [label, value] = line.split('=')
+      return { label: label.trim(), value: value.trim() }
+    })
 }
 
-const handleDragEnd = () => {
-  isDraggingOver.value = false
+const formatOptions = (options?: { label: string, value: string }[]): string => {
+  if (!options) return ''
+  return options.map(opt => `${opt.label}=${opt.value}`).join('\n')
 }
 
-const handleDrop = (event: any) => {
-  isDraggingOver.value = false
-  if (event.added && event.added.element.isTemplate) {
-    const type = event.added.element.value
-    const newField: FormField = {
-      id: crypto.randomUUID(),
-      type,
-      label: `New ${type} field`,
-      required: false,
-      orderIndex: props.modelValue.steps[activeStep.value].fields.length + 1,
-      options: getDefaultOptionsForType(type),
-      validation: {}
-    }
-    
-    const newTemplate = { ...props.modelValue }
-    newTemplate.steps[activeStep.value].fields.splice(event.added.newIndex, 1, newField)
-    emit('update:modelValue', newTemplate)
+const optionsText = ref('')
 
-    // Initialize preview value
-    if (isPreviewMode.value) {
-      previewValues.value[newField.id] = getPreviewValue(newField)
-    }
+const addNewField = () => {
+  const newField: FormField = {
+    id: crypto.randomUUID(),
+    type: 'text',
+    name: '',
+    label: '',
+    validation: '',
+    options: []
   }
+  editingField.value = newField
+  optionsText.value = ''
+  showFieldEditor.value = true
 }
 
-const getDefaultOptionsForType = (type: string) => {
-  switch(type) {
-    case 'text':
-      return { inputType: 'text', placeholder: '' }
-    case 'textarea':
-      return { rows: 4, placeholder: '' }
-    case 'select':
-    case 'radio':
-    case 'checkbox':
-      return { choices: [] }
-    case 'range':
-      return { min: 0, max: 100, step: 1 }
-    case 'rating':
-      return { max: 5 }
-    default:
-      return {}
-  }
+const editField = (field: FormField) => {
+  editingField.value = { ...field }
+  optionsText.value = formatOptions(field.options)
+  showFieldEditor.value = true
 }
 
-const saveFieldChanges = () => {
+const saveField = () => {
   if (!editingField.value) return
-  const newTemplate = { ...props.modelValue }
-  const fieldIndex = newTemplate.steps[activeStep.value].fields.findIndex(f => f.id === editingField.value?.id)
-  if (fieldIndex > -1) {
-    newTemplate.steps[activeStep.value].fields[fieldIndex] = editingField.value
-    emit('update:modelValue', newTemplate)
+
+  // Parse options if it's a select field
+  if (editingField.value.type === 'select') {
+    editingField.value.options = parseOptions(optionsText.value)
+  } else {
+    editingField.value.options = undefined
   }
+
+  const newFields = [...props.modelValue]
+  const index = newFields.findIndex(f => f.id === editingField.value?.id)
+  
+  if (index === -1) {
+    // New field
+    newFields.push(editingField.value)
+  } else {
+    // Update existing field
+    newFields[index] = editingField.value
+  }
+  
+  emit('update:modelValue', newFields)
+  showFieldEditor.value = false
   editingField.value = null
 }
 
-const deleteField = (field: FormField) => {
-  const newTemplate = { ...props.modelValue }
-  const fieldIndex = newTemplate.steps[activeStep.value].fields.findIndex(f => f.id === field.id)
-  if (fieldIndex > -1) {
-    newTemplate.steps[activeStep.value].fields.splice(fieldIndex, 1)
-    emit('update:modelValue', newTemplate)
-  }
-}
-
-// Add preview data state
-const previewValues = ref<Record<string, any>>({})
-
-// Get preview value for a field
-const getPreviewValue = (field: FormField) => {
-  if (!field) return null
-  
-  if (previewValues.value[field.id]) {
-    return previewValues.value[field.id]
-  }
-
-  // Set initial preview value based on field type
-  const value = (() => {
-    switch(field.type) {
-      case 'text':
-        return field.options?.placeholder || 'Sample text'
-      case 'textarea':
-        return field.options?.placeholder || 'Sample text\nNew line'
-      case 'select':
-      case 'radio':
-        return field.options?.choices?.[0]?.value || ''
-      case 'checkbox':
-        return field.options?.choices?.[0]?.value || false
-      case 'range':
-        return (field.options?.max || 100) / 2
-      case 'rating':
-        return Math.ceil((field.options?.max || 5) / 2)
-      case 'toggle':
-        return true
-      case 'file':
-        return null
-      default:
-        return ''
-    }
-  })()
-
-  previewValues.value[field.id] = value
-  return value
-}
-
-const handleSave = async () => {
-  try {
-    await saveTemplate(props.modelValue)
-  } catch (err) {
-    console.error('Error saving template:', err)
-  }
+const moveField = (fromIndex: number, toIndex: number) => {
+  const newFields = [...props.modelValue]
+  const [movedField] = newFields.splice(fromIndex, 1)
+  newFields.splice(toIndex, 0, movedField)
+  emit('update:modelValue', newFields)
 }
 </script>
 
 <template>
-  <div class="space-y-4">
-    <!-- Steps Navigation with Preview Toggle -->
-    <div class="flex justify-between items-center">
-      <div class="flex-1">
-        <ul class="steps steps-horizontal w-full">
-          <li v-for="(step, index) in modelValue.steps" 
-              :key="step.id"
-              class="step cursor-pointer"
-              :class="{ 'step-primary': index <= activeStep }"
-              @click="activeStep = index">
-            {{ step.title || `Step ${index + 1}` }}
-          </li>
-        </ul>
-      </div>
-      <label class="flex items-center gap-2 cursor-pointer">
-        <span class="label-text">Preview Mode</span>
-        <input 
-          type="checkbox"
-          class="toggle toggle-primary"
-          v-model="isPreviewMode"
-        />
-      </label>
-    </div>
-
-    <!-- Active Step -->
-    <div v-if="modelValue.steps[activeStep]" class="card bg-base-100 shadow-xl">
-      <div class="card-body">
-        <div class="flex justify-between items-start mb-6">
-          <div class="space-y-4 flex-1">
-            <input 
-              v-model="modelValue.steps[activeStep].title"
-              type="text"
-              class="input input-bordered text-xl font-bold w-full"
-              placeholder="Step Title"
-            />
-            <textarea
-              v-model="modelValue.steps[activeStep].description"
-              class="textarea textarea-bordered w-full"
-              placeholder="Step Description"
-            />
+  <div class="space-y-6">
+    <!-- Template Selection -->
+    <div v-if="!isLoading && !error && templates.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div
+        v-for="template in templates"
+        :key="template.id"
+        class="card bg-base-100 shadow-xl cursor-pointer hover:shadow-2xl transition-shadow"
+        @click="addTemplate(template.id)"
+      >
+        <div class="card-body">
+          <h3 class="card-title">{{ template.title }}</h3>
+          <p class="text-sm text-base-content/70">{{ template.description }}</p>
+          <div class="text-xs text-base-content/60">
+            {{ template.schema.length }} fields
           </div>
-          <button 
-            @click="removeStep(activeStep)"
-            class="btn btn-ghost btn-sm text-error"
-            :disabled="modelValue.steps.length === 1"
-          >
-            <i class="fas fa-trash"></i>
-          </button>
         </div>
-
-        <!-- Field List -->
-        <draggable
-          v-model="modelValue.steps[activeStep].fields"
-          :group="{ name: 'fields', pull: false, put: true }"
-          item-key="id"
-          class="space-y-2 min-h-[200px]"
-          :class="{ 'border-2 border-dashed border-primary p-4': isDraggingOver }"
-          @start="handleDragStart"
-          @end="handleDragEnd"
-          @add="handleDrop"
-        >
-          <template #item="{ element: field }">
-            <BaseFormField
-              :field="field"
-              :component="fieldTypes.find(t => t.value === field.type)?.component"
-              :preview="isPreviewMode"
-              :model-value="isPreviewMode ? getPreviewValue(field) : undefined"
-              @edit="editingField = field"
-              @delete="deleteField(field)"
-            />
-          </template>
-        </draggable>
-
-        <!-- Field Types -->
-        <div class="divider">Available Fields</div>
-        <draggable
-          :list="fieldTypes"
-          :group="{ name: 'fields', pull: 'clone', put: false }"
-          :sort="false"
-          item-key="value"
-          class="grid grid-cols-3 gap-4"
-        >
-          <template #item="{ element: type }">
-            <div 
-              class="card bg-base-200 cursor-move hover:bg-base-300 transition-colors"
-            >
-              <div class="card-body items-center text-center p-4">
-                <i :class="['fas', type.icon, 'text-2xl']"></i>
-                <h3 class="card-title text-sm">{{ type.label }}</h3>
-              </div>
-            </div>
-          </template>
-        </draggable>
       </div>
     </div>
 
-    <!-- Add Step Button -->
-    <button 
-      @click="addStep"
-      class="btn btn-primary w-full"
-    >
-      Add Step
-    </button>
+    <!-- Loading State -->
+    <div v-else-if="isLoading" class="flex justify-center py-8">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
 
-    <!-- Save Button -->
-    <button 
-      @click="handleSave"
-      class="btn btn-success w-full"
-      :disabled="loading"
-    >
-      {{ loading ? 'Saving...' : 'Save Template' }}
-    </button>
+    <!-- Error State -->
+    <div v-else-if="error" class="alert alert-error">
+      <i class="fas fa-exclamation-circle" aria-hidden="true" />
+      <span>{{ error }}</span>
+      <button class="btn btn-sm btn-ghost" @click="loadTemplates">
+        Try Again
+      </button>
+    </div>
 
-    <!-- Error Display -->
-    <div v-if="error" class="alert alert-error">
-      {{ error }}
+    <!-- Current Form Fields -->
+    <div v-if="modelValue.length > 0" class="mt-8">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold">Current Form Fields</h3>
+        <button class="btn btn-primary btn-sm" @click="addNewField">
+          <i class="fas fa-plus" aria-hidden="true"></i>
+          Add Field
+        </button>
+      </div>
+      <div class="space-y-4">
+        <div
+          v-for="(field, index) in modelValue"
+          :key="field.id"
+          class="flex items-center justify-between p-4 bg-base-200 rounded-lg"
+          draggable="true"
+          @dragstart="e => e.dataTransfer?.setData('text/plain', index.toString())"
+          @dragover.prevent
+          @drop="e => {
+            e.preventDefault()
+            const fromIndex = parseInt(e.dataTransfer?.getData('text/plain') || '0')
+            moveField(fromIndex, index)
+          }"
+        >
+          <div class="flex-1">
+            <p class="font-medium">{{ field.label }}</p>
+            <p class="text-sm text-base-content/70">
+              Type: {{ field.type }}
+              <span v-if="field.validation" class="ml-2">
+                ({{ field.validation }})
+              </span>
+            </p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              class="btn btn-ghost btn-sm"
+              @click="editField(field)"
+              aria-label="Edit field"
+            >
+              <i class="fas fa-pencil" aria-hidden="true"></i>
+            </button>
+            <button
+              class="btn btn-ghost btn-sm text-error"
+              @click="removeField(field.id)"
+              aria-label="Remove field"
+            >
+              <i class="fas fa-trash" aria-hidden="true"></i>
+            </button>
+            <button
+              class="btn btn-ghost btn-sm cursor-move"
+              aria-label="Drag to reorder"
+            >
+              <i class="fas fa-grip-vertical" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Field Editor Modal -->
-    <dialog 
-      class="modal" 
-      :open="!!editingField"
-    >
+    <dialog :class="{ 'modal': true, 'modal-open': showFieldEditor }">
       <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Edit Field</h3>
+        <h3 class="font-bold text-lg mb-4">
+          {{ editingField ? (editingField.id ? 'Edit Field' : 'Add New Field') : '' }}
+        </h3>
         
-        <!-- Tabs -->
-        <div class="tabs tabs-boxed mb-4">
-          <a 
-            class="tab" 
-            :class="{ 'tab-active': configTab === 'options' }"
-            @click="configTab = 'options'"
-          >
-            Options
-          </a>
-          <a 
-            class="tab"
-            :class="{ 'tab-active': configTab === 'validation' }"
-            @click="configTab = 'validation'"
-          >
-            Validation
-          </a>
-          <a 
-            class="tab"
-            :class="{ 'tab-active': configTab === 'conditions' }"
-            @click="configTab = 'conditions'"
-          >
-            Conditions
-          </a>
-        </div>
-
-        <template v-if="editingField">
-          <!-- Basic Settings -->
-          <div class="form-control w-full mb-4">
+        <form v-if="editingField" @submit.prevent="saveField" class="space-y-4">
+          <div class="form-control">
             <label class="label">
-              <span class="label-text">Field Label</span>
+              <span class="label-text">Field Type</span>
             </label>
-            <input 
-              v-model="editingField.label"
-              type="text" 
+            <select v-model="editingField.type" class="select select-bordered w-full">
+              <option v-for="type in fieldTypes" :key="type.value" :value="type.value">
+                {{ type.label }}
+              </option>
+            </select>
+          </div>
+
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">Field Name</span>
+            </label>
+            <input
+              v-model="editingField.name"
+              type="text"
               class="input input-bordered w-full"
+              placeholder="Enter field name (e.g. full_name)"
             />
           </div>
 
-          <!-- Options Tab -->
-          <div v-if="configTab === 'options'" class="space-y-4">
-            <div class="form-control">
-              <label class="label cursor-pointer">
-                <span class="label-text">Required</span>
-                <input 
-                  type="checkbox"
-                  class="checkbox"
-                  v-model="editingField.required"
-                />
-              </label>
-            </div>
-
-            <!-- Field-specific options -->
-            <template v-if="editingField.type === 'text'">
-              <div class="form-control">
-                <label class="label">
-                  <span class="label-text">Placeholder</span>
-                </label>
-                <input 
-                  v-model="editingField.options.placeholder"
-                  type="text"
-                  class="input input-bordered"
-                />
-              </div>
-            </template>
-
-            <template v-if="editingField.type === 'select' || editingField.type === 'radio' || editingField.type === 'checkbox'">
-              <div class="space-y-2">
-                <label class="label">
-                  <span class="label-text">Choices</span>
-                </label>
-                <div 
-                  v-for="(choice, index) in editingField.options.choices"
-                  :key="index"
-                  class="flex gap-2"
-                >
-                  <input 
-                    v-model="choice.label"
-                    type="text"
-                    class="input input-bordered flex-1"
-                    placeholder="Label"
-                  />
-                  <input 
-                    v-model="choice.value"
-                    type="text"
-                    class="input input-bordered flex-1"
-                    placeholder="Value"
-                  />
-                  <button 
-                    @click="editingField.options.choices.splice(index, 1)"
-                    class="btn btn-ghost btn-sm text-error"
-                  >
-                    <i class="fas fa-times"></i>
-                  </button>
-                </div>
-                <button 
-                  @click="editingField.options.choices.push({ label: '', value: '' })"
-                  class="btn btn-ghost btn-sm"
-                >
-                  Add Choice
-                </button>
-              </div>
-            </template>
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">Field Label</span>
+            </label>
+            <input
+              v-model="editingField.label"
+              type="text"
+              class="input input-bordered w-full"
+              placeholder="Enter field label (e.g. Full Name)"
+            />
           </div>
 
-          <!-- Validation Tab -->
-          <div v-if="configTab === 'validation'" class="space-y-4">
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">Minimum Value</span>
-              </label>
-              <input 
-                v-model.number="editingField.validation.min"
-                type="number"
-                class="input input-bordered"
-              />
-            </div>
-
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">Maximum Value</span>
-              </label>
-              <input 
-                v-model.number="editingField.validation.max"
-                type="number"
-                class="input input-bordered"
-              />
-            </div>
-
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">Pattern (Regex)</span>
-              </label>
-              <input 
-                v-model="editingField.validation.pattern"
-                type="text"
-                class="input input-bordered"
-              />
-            </div>
-
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">Error Message</span>
-              </label>
-              <input 
-                v-model="editingField.validation.message"
-                type="text"
-                class="input input-bordered"
-              />
-            </div>
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">Validation Rules</span>
+            </label>
+            <select
+              v-model="editingField.validation"
+              class="select select-bordered w-full"
+            >
+              <option value="">None</option>
+              <option v-for="rule in validationRules" :key="rule.value" :value="rule.value">
+                {{ rule.label }}
+              </option>
+            </select>
           </div>
 
-          <!-- Conditions Tab -->
-          <div v-if="configTab === 'conditions'" class="space-y-4">
-            <div class="form-control">
-              <label class="label cursor-pointer">
-                <span class="label-text">Enable Conditions</span>
-                <input 
-                  type="checkbox"
-                  class="toggle"
-                  v-model="editingField.isConditional"
-                />
-              </label>
-            </div>
-
-            <template v-if="editingField.isConditional">
-              <div class="form-control">
-                <label class="label">
-                  <span class="label-text">Condition Type</span>
-                </label>
-                <select 
-                  v-model="editingField.conditionLogic.type"
-                  class="select select-bordered"
-                >
-                  <option value="AND">All conditions must match (AND)</option>
-                  <option value="OR">Any condition must match (OR)</option>
-                </select>
-              </div>
-
-              <div class="space-y-2">
-                <div 
-                  v-for="(condition, index) in editingField.conditionLogic.conditions"
-                  :key="index"
-                  class="card bg-base-200 p-4"
-                >
-                  <div class="space-y-2">
-                    <select 
-                      v-model="condition.fieldId"
-                      class="select select-bordered w-full"
-                    >
-                      <option 
-                        v-for="field in modelValue.steps[activeStep].fields"
-                        :key="field.id"
-                        :value="field.id"
-                      >
-                        {{ field.label }}
-                      </option>
-                    </select>
-
-                    <select 
-                      v-model="condition.operator"
-                      class="select select-bordered w-full"
-                    >
-                      <option value="equals">Equals</option>
-                      <option value="notEquals">Does not equal</option>
-                      <option value="contains">Contains</option>
-                      <option value="greaterThan">Greater than</option>
-                      <option value="lessThan">Less than</option>
-                    </select>
-
-                    <input 
-                      v-model="condition.value"
-                      type="text"
-                      class="input input-bordered w-full"
-                      placeholder="Value"
-                    />
-
-                    <button 
-                      @click="editingField.conditionLogic.conditions.splice(index, 1)"
-                      class="btn btn-ghost btn-sm text-error"
-                    >
-                      Remove Condition
-                    </button>
-                  </div>
-                </div>
-
-                <button 
-                  @click="editingField.conditionLogic.conditions.push({
-                    fieldId: '',
-                    operator: 'equals',
-                    value: ''
-                  })"
-                  class="btn btn-ghost btn-sm"
-                >
-                  Add Condition
-                </button>
-              </div>
-            </template>
+          <div v-if="editingField.type === 'select'" class="form-control">
+            <label class="label">
+              <span class="label-text">Options (one per line, format: label=value)</span>
+            </label>
+            <textarea
+              v-model="optionsText"
+              class="textarea textarea-bordered w-full h-24"
+              placeholder="High School=high_school&#10;Bachelor's Degree=bachelors"
+            ></textarea>
           </div>
-        </template>
 
-        <div class="modal-action">
-          <button 
-            @click="editingField = null"
-            class="btn"
-          >
-            Cancel
-          </button>
-          <button 
-            @click="saveFieldChanges"
-            class="btn btn-primary"
-          >
-            Save Changes
-          </button>
-        </div>
+          <div class="modal-action">
+            <button type="button" class="btn" @click="showFieldEditor = false">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Save Field
+            </button>
+          </div>
+        </form>
       </div>
+      <form method="dialog" class="modal-backdrop">
+        <button @click="showFieldEditor = false">Close</button>
+      </form>
     </dialog>
   </div>
-</template>
-
-<style scoped>
-.sortable-ghost {
-  opacity: 0.5;
-}
-
-.sortable-drag {
-  cursor: grabbing;
-}
-</style>
+</template> 

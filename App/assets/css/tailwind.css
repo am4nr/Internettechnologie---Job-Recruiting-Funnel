@@ -6,6 +6,16 @@ body {
     @apply bg-gray-50
 }
 
+/* Layout transition */
+.layout-enter-active,
+.layout-leave-active {
+  transition: all 0.2s;
+}
+.layout-enter-from,
+.layout-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
 
 @layer components {
     .menu-list {

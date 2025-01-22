@@ -1,25 +1,46 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 // nuxt.config.ts
 export default defineNuxtConfig({
+  nitro: {
+    preset: 'node-server',
+    debug: true
+  },
   modules: [
     '@nuxtjs/tailwindcss',
     '@nuxtjs/supabase',
+    '@formkit/nuxt',
     'nuxt-nodemailer',
   ],
 
   supabase: {
-    redirect: false,
-    redirectOptions: {
-      login: '/auth/login',
-      callback: '/auth/confirm',
-      exclude: [],
+    clientOptions: {
+      auth: {
+        flowType: 'implicit',
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        persistSession: true,
+        storage: {
+          getItem: (key) => globalThis.localStorage?.getItem(key),
+          setItem: (key, value) => globalThis.localStorage?.setItem(key, value),
+          removeItem: (key) => globalThis.localStorage?.removeItem(key),
+        }
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 0
+        }
+      },
+      global: {
+        headers: {
+          'x-my-custom-header': 'my-app-name'
+        }
+      }
     },
+    redirect: false,
     cookieOptions: {
-      name: 'sb-auth',
-      lifetime: 60 * 60 * 8, // 8 hours
-      domain: '',
-      path: '/',
-      sameSite: 'lax'
+      maxAge: 60 * 60 * 4,
+      sameSite: 'lax',
+      secure: true
     }
   },
 
@@ -33,20 +54,17 @@ export default defineNuxtConfig({
     }
   },
 
-  nitro: {
-    debug: true
-  },
-
   app: {
     head: {
-      title: 'Mein Shop',
+      title: 'Kistenkönige Logistik',
       meta: [
-        { name: 'description', content: 'Tolle Dinge bei uns' }
+        { name: 'description', content: 'Ihr zuverlässiger Partner für Dienstleistungen, z. B. Transporte, Logistik oder ähnliche Angebote' }
       ],
       link: [
         { rel: 'stylesheet', href: 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css' }
       ]
-    }
+    },
+    layoutTransition: { name: 'layout', mode: 'out-in' }
   },
 
   // Enable dev tools for better debugging
@@ -62,18 +80,18 @@ export default defineNuxtConfig({
       {
         path: '~/components/navigation',
         pathPrefix: false,
-      },
-      {
-        path: '~/composables',
-        pathPrefix: false,
       }
     ]
   },
 
-  plugins: ['~/plugins/Vue3Lottie.client.ts'],
+  plugins: [],
   css: [
     'daisyui/dist/full.css',
     '@fortawesome/fontawesome-free/css/all.min.css',
     '~/assets/css/tailwind.css',
   ],
+
+  formkit: {
+    configFile: './formkit.config.ts'
+  },
 })

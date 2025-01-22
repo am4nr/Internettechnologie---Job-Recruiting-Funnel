@@ -1,86 +1,103 @@
 // composables/useNav.ts
-import { useRouter } from '#app'
-import { computed } from 'vue'
-import { useSupabaseStore } from './useSupabaseStore'
+import { /* useRouter, */ computed, onMounted, ref } from 'vue'
+import { useAuthStore } from '~/stores/auth'
+import { useSupabaseUser } from '#imports'
 
 export interface NavItem {
-  name: string
-  path: string
-  location?: 'navbar' | 'footer'
-  children?: NavItem[]
+  label: string
+  to: string
+  icon: string
+}
+
+export interface FooterSection {
+  title: string
+  items: {
+    label: string
+    to: string
+  }[]
 }
 
 export const useNav = () => {
-  const store = useSupabaseStore()
-  const router = useRouter()
+  const authStore = useAuthStore()
+  const user = useSupabaseUser()
+  // const router = useRouter() // Removed unused variable
+  const permissionsLoaded = ref(false)
 
-  console.log('Nav setup:', { 
-    isAuthenticated: store.auth.value.isAuthenticated,
-    role: store.auth.value.role
+  // Fetch permissions on mount if user is authenticated
+  onMounted(async () => {
+    if (user.value) {
+      await authStore.fetchPermissions()
+      permissionsLoaded.value = true
+    }
   })
 
-  const allNavItems = computed(() => {
+  const navItems = computed<NavItem[]>(() => {
+    // Always show these items
     const items: NavItem[] = [
-      // Public navbar items
       {
-        name: 'Jobs',
-        path: '/jobs',
-        location: 'navbar',
-        children: [
-          { name: 'Search', path: '/jobs/search' },
-          { name: 'Apply', path: '/jobs/apply' },
-        ]
-      },
-      // Footer items
-      {
-        name: 'Company',
-        path: '/about',
-        location: 'footer',
-        children: [
-          { name: 'About', path: '/about' },
-          { name: 'Imprint', path: '/about/imprint' }
-        ]
+        label: 'Home',
+        to: '/',
+        icon: 'fas fa-home'
       },
       {
-        name: 'Legal',
-        path: '/legal',
-        location: 'footer',
-        children: [
-          { name: 'Privacy', path: '/legal/privacy' },
-          { name: 'Terms', path: '/legal/terms' }
-        ]
+        label: 'Jobs',
+        to: '/jobs',
+        icon: 'fas fa-briefcase'
       }
     ]
 
-    if (store.auth.value.isAuthenticated) {
+    // Add authenticated items
+    if (user.value) {
       items.push({
-        name: 'Dashboard',
-        path: '/dashboard',
-        location: 'navbar',
-        children: [
-          { name: 'Profile', path: '/dashboard/profile' },
-          { name: 'Applications', path: '/dashboard/applications' }
-        ]
+        label: 'Dashboard',
+        to: '/dashboard',
+        icon: 'fas fa-tachometer-alt'
       })
 
-      if (store.auth.value.role === 'admin') {
-        items.push({
-          name: 'Admin',
-          path: '/admin',
-          location: 'navbar',
-          children: [
-            { name: 'Users', path: '/admin/users' },
-            { name: 'Settings', path: '/admin/settings' }
-          ]
-        })
+      // Add admin link if user has required permissions
+      if (permissionsLoaded.value) {
+        const hasAdminPerms = authStore.hasPermissions(['roles.read_all', 'roles.update_all'])
+        const hasJobManagementPerms = authStore.hasPermissions([
+          'jobs.create',
+          'applications.read_all',
+          'applications.change_status',
+          'forms.read_all'
+        ])
+
+        if (hasAdminPerms || hasJobManagementPerms) {
+          items.push({
+            label: 'Admin',
+            to: '/admin',
+            icon: 'fas fa-shield-alt'
+          })
+        }
       }
     }
 
     return items
   })
 
+  const footerSections = computed<FooterSection[]>(() => [
+    {
+      title: 'Unternehmen',
+      items: [
+        { label: 'Über uns', to: '/about' },
+        { label: 'Karriere', to: '/jobs' },
+      ]
+    },
+    {
+      title: 'Rechtliches',
+      items: [
+        { label: 'Impressum', to: '/about/imprint' },
+        { label: 'Datenschutz', to: '/legal/privacy' },
+        { label: 'AGB', to: '/legal/terms' }
+      ]
+    }
+  ])
+
   return {
-    navItems: computed(() => allNavItems.value.filter(item => item.location === 'navbar')),
-    footerItems: computed(() => allNavItems.value.filter(item => item.location === 'footer'))
+    navItems,
+    footerSections,
+    permissionsLoaded
   }
 }

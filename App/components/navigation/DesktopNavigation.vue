@@ -7,33 +7,42 @@
 
     <div class="hidden lg:flex flex-none">
       <ul class="menu menu-horizontal px-1 gap-2">
-        <li v-for="item in navItems" :key="item.path">
-          <NuxtLink 
-            :to="item.path"
-            class="rounded-lg hover:bg-base-200"
-            active-class="bg-primary text-white"
-          >
-            {{ item.name }}
-          </NuxtLink>
-        </li>
+        <template v-if="navItems">
+          <li v-for="item in navItems" :key="item.to">
+            <NuxtLink 
+              :to="item.to"
+              class="rounded-lg hover:bg-base-200"
+              active-class="bg-primary text-white"
+            >
+              <i :class="item.icon" class="mr-2"></i>
+              {{ item.label }}
+            </NuxtLink>
+          </li>
+        </template>
       </ul>
     </div>
 
     <div class="flex-none gap-2 hidden lg:block">
-      <template v-if="user">
-        <UserMenu :user="user" position="bottom-right" />
-      </template>
-      <template v-else>
-        <NuxtLink to="/auth/login" class="btn btn-primary btn-sm">Login</NuxtLink>
-      </template>
+      <ClientOnly>
+        <template v-if="user">
+          <UserMenu position="bottom-right" />
+        </template>
+        <template v-else>
+          <NuxtLink to="/auth/login" class="btn btn-primary btn-sm">Login</NuxtLink>
+        </template>
+      </ClientOnly>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useSupabaseUser } from '#imports'
+import type { NavItem } from '~/composables/useNav'
+
 defineProps<{
   logoText: string
   navItems: NavItem[]
-  user: any
 }>()
+
+const user = useSupabaseUser()
 </script>

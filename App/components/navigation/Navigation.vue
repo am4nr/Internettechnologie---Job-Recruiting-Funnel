@@ -8,7 +8,6 @@
           <DesktopNavigation 
             :logo-text="logoText"
             :nav-items="navItems"
-            :user="user"
           />
           
           <!-- Hamburger Button -->
@@ -25,7 +24,6 @@
       <MobileNavigation 
         :logo-text="logoText"
         :nav-items="navItems"
-        :user="user"
       />
     </div>
   </nav>
@@ -33,9 +31,10 @@
 
 <script setup lang="ts">
 import { useNav } from '~/composables/useNav'
-import { useSupabaseUser } from '#imports'
+
+defineProps<{
+  logoText: string
+}>()
 
 const { navItems } = useNav()
-const user = useSupabaseUser()
-const logoText = "Kistenkönige Logistik"
 </script>

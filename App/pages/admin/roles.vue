@@ -1,32 +1,74 @@
 <!-- pages/admin/roles.vue -->
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useSupabaseStore } from '~/composables/useSupabaseStore'
-import type { Role } from '~/types/auth'
+import { useAuthStore } from '~/stores/auth'
+import { useSupabaseClient } from '#imports'
+import type { AppPermission, Role } from '~/types/auth'
 
 definePageMeta({
   layout: 'admin',
   middleware: ['auth']
 })
 
-const store = useSupabaseStore()
-const loading = ref(false)
-const error = ref<string | null>(null)
+const client = useSupabaseClient()
+const authStore = useAuthStore()
 const roles = ref<Role[]>([])
+const error = ref<string | null>(null)
+const isLoading = ref(false)
 
-// Load roles on page mount
-onMounted(async () => {
-  loading.value = true
+const fetchRoles = async () => {
   try {
-    const { data, error: fetchError } = await store.fetchRoles()
-    if (fetchError) throw fetchError
-    roles.value = data || []
-  } catch (err: any) {
-    error.value = err.message
-    console.error('Error loading roles:', err)
+    isLoading.value = true
+    const { data: rolePerms, error: permsError } = await client
+      .from('role_permissions')
+      .select('role, permission')
+
+    if (permsError) throw permsError
+
+    if (!rolePerms?.length) {
+      roles.value = []
+      return
+    }
+
+    // Get unique roles and their permissions
+    const uniqueRoles = [...new Set(rolePerms.map(rp => rp.role))]
+    roles.value = uniqueRoles.map(roleName => ({
+      name: roleName,
+      permissions: rolePerms
+        .filter(rp => rp.role === roleName)
+        .map(rp => rp.permission)
+    }))
+  } catch (err) {
+    console.error('Error fetching roles:', err)
+    error.value = 'Failed to load roles'
   } finally {
-    loading.value = false
+    isLoading.value = false
   }
+}
+
+const updateRolePermission = async (role: string, permission: AppPermission, enabled: boolean) => {
+  try {
+    if (enabled) {
+      const { error } = await client
+        .from('role_permissions')
+        .insert({ role, permission })
+      if (error) throw error
+    } else {
+      const { error } = await client
+        .from('role_permissions')
+        .delete()
+        .match({ role, permission })
+      if (error) throw error
+    }
+    await fetchRoles()
+  } catch (err) {
+    console.error('Error updating role permissions:', err)
+    error.value = 'Failed to update role permissions'
+  }
+}
+
+onMounted(async () => {
+  await fetchRoles()
 })
 
 // Permission groups
@@ -101,7 +143,7 @@ const permissionGroups = {
 const togglePermission = async (role: Role, permission: string) => {
   const hasPermission = role.permissions.includes(permission)
   try {
-    const { data, error: updateError } = await store.updateRolePermissions(role.name, permission, !hasPermission)
+    const { data, error: updateError } = await updateRolePermission(role.name, permission, !hasPermission)
     if (updateError) throw updateError
     if (data) roles.value = data
   } catch (err: any) {
@@ -115,36 +157,48 @@ const togglePermission = async (role: Role, permission: string) => {
   <div class="p-6">
     <h1 class="text-2xl font-bold mb-6">Role Management</h1>
     
-    <div v-if="loading" class="flex justify-center items-center py-8">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    <!-- Loading State -->
+    <div v-if="isLoading" class="flex justify-center py-8">
+      <span class="loading loading-spinner loading-lg"></span>
     </div>
 
+    <!-- Error Alert -->
     <div v-if="error" class="alert alert-error mb-6">
+      <i class="fas fa-exclamation-circle mr-2"></i>
       {{ error }}
     </div>
 
-    <div v-else-if="roles.length === 0" class="text-center py-8 text-gray-500">
+    <!-- Empty State -->
+    <div v-else-if="roles.length === 0" class="text-center py-8 text-base-content/60">
       No roles found.
     </div>
 
+    <!-- Roles Grid -->
     <div v-else class="grid gap-6">
-      <div v-for="role in roles" :key="role.name" class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 class="text-xl font-semibold mb-4 capitalize">{{ role.name }}</h2>
-        
-        <div class="space-y-6">
-          <div v-for="(group, key) in permissionGroups" :key="key" class="border-t pt-4 first:border-t-0 first:pt-0">
-            <h3 class="font-semibold mb-3">{{ group.title }}</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div v-for="perm in group.permissions" :key="perm.name" class="flex items-center">
-                <label class="inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    :checked="role.permissions.includes(perm.name)"
-                    @change="togglePermission(role, perm.name)"
-                    class="form-checkbox h-5 w-5 text-primary rounded border-gray-300 focus:ring-primary"
-                  >
-                  <span class="ml-2 text-sm">{{ perm.label }}</span>
-                </label>
+      <div v-for="role in roles" :key="role.name" class="collapse collapse-arrow bg-base-100 shadow-xl">
+        <input type="checkbox" class="peer" /> 
+        <div class="collapse-title card-title capitalize flex items-center">
+          {{ role.name }}
+          <div class="badge badge-primary ml-4">
+            {{ role.permissions.length }} permissions
+          </div>
+        </div>
+        <div class="collapse-content">
+          <div class="space-y-6 pt-4">
+            <div v-for="(group, key) in permissionGroups" :key="key" class="border-t border-base-200 pt-4 first:border-t-0 first:pt-0">
+              <h3 class="font-semibold mb-3">{{ group.title }}</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div v-for="perm in group.permissions" :key="perm.name" class="flex items-center">
+                  <label class="label cursor-pointer justify-start gap-2">
+                    <input
+                      type="checkbox"
+                      :checked="role.permissions.includes(perm.name)"
+                      @change="togglePermission(role, perm.name)"
+                      class="checkbox checkbox-primary checkbox-sm"
+                    >
+                    <span class="label-text">{{ perm.label }}</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>

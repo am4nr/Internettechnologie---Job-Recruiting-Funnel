@@ -1,28 +1,24 @@
 <!-- components/layout/Footer.vue -->
 <template>
-  <footer class="bg-base-300 text-base-content">
-    <div class="container mx-auto pt-1 pb-2">
-      <!-- Main Footer Content -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-x-4 gap-y-2 px-6">
+  <footer class="bg-base-200 text-base-content">
+    <div class="container mx-auto">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 p-6">
         <!-- Company Info -->
         <div>
-          <h3 class="font-bold mb-1">Kistenkönige Logistik</h3>
-          <div class="space-y-1">
-            <a href="mailto:info@kistenkoenige.de" class="inline-flex items-center gap-2 hover:text-primary transition-colors">
-              <i class="fas fa-envelope w-4"></i>
-              <span>info@kistenkoenige.de</span>
+          <h3 class="font-bold mb-1">Kontakt</h3>
+          <div class="flex flex-col gap-2">
+            <a href="tel:+49123456789" class="flex items-start gap-2 hover:text-primary">
+              <i class="fas fa-phone w-4 mt-0.5"></i>
+              <span>+49 123 456 789</span>
             </a>
-            <div class="flex items-center gap-2">
-              <i class="fas fa-phone w-4"></i>
-              <div class="leading-tight">
-                <a href="tel:+494211234567" class="hover:text-primary transition-colors block">+49 421 12345678</a>
-                <a href="tel:+494218765432" class="hover:text-primary transition-colors block">+49 421 87654321</a>
-              </div>
-            </div>
+            <a href="mailto:info@kistenkonige.de" class="flex items-start gap-2 hover:text-primary">
+              <i class="fas fa-envelope w-4 mt-0.5"></i>
+              <span>info@kistenkonige.de</span>
+            </a>
           </div>
         </div>
 
-        <!-- Address -->
+        <!-- Location -->
         <div>
           <h3 class="font-bold mb-1">Standort</h3>
           <address class="not-italic flex items-start gap-2 leading-tight">
@@ -35,20 +31,22 @@
           </address>
         </div>
 
-        <!-- Navigation Links -->
-        <div v-for="item in footerItems" :key="item.path">
-          <h3 class="font-bold mb-1">{{ item.name }}</h3>
-          <ul class="space-y-1">
-            <li v-for="child in item.children" :key="child.path">
-              <NuxtLink 
-                :to="child.path" 
-                class="hover:text-primary transition-colors"
-              >
-                {{ child.name }}
-              </NuxtLink>
-            </li>
-          </ul>
-        </div>
+        <!-- Footer Sections -->
+        <template v-for="section in footerSections" :key="section.title">
+          <div>
+            <h3 class="font-bold mb-1">{{ section.title }}</h3>
+            <ul class="space-y-1">
+              <li v-for="item in section.items" :key="item.to">
+                <NuxtLink 
+                  :to="item.to" 
+                  class="hover:text-primary transition-colors"
+                >
+                  {{ item.label }}
+                </NuxtLink>
+              </li>
+            </ul>
+          </div>
+        </template>
 
         <!-- Copyright Notice -->
         <div class="md:col-span-2 lg:col-span-1">
@@ -63,5 +61,5 @@
 <script setup lang="ts">
 import { useNav } from '~/composables/useNav'
 
-const { footerItems } = useNav()
+const { footerSections } = useNav()
 </script>

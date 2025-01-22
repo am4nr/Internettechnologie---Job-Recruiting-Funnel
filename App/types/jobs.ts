@@ -1,26 +1,20 @@
 // types/jobs.ts
-import type { FormField } from './form'
+import type { Database } from './database'
+import type { Form } from './form'
 
-export interface ApplicationStep {
-  id: string
-  title: string
-  description?: string
-  order: number
-  fields: FormField[]
+type DbJob = Database['public']['Tables']['jobs']['Row']
+
+export interface Job extends DbJob {
+  form?: Form
 }
 
-export interface Job {
-  id: string
-  title: string
-  description: string
-  company: string
-  location: string
-  salary_range?: string
-  requirements?: string[]
-  responsibilities?: string[]
-  status: 'draft' | 'published' | 'closed'
-  created_at: string
-  updated_at: string
-  application_steps: ApplicationStep[]
-  meta?: Record<string, any>
+export type JobInsert = Database['public']['Tables']['jobs']['Insert']
+export type JobUpdate = Database['public']['Tables']['jobs']['Update']
+
+export interface FormKitGroupValue {
+  [key: string]: any
+}
+
+export interface FormKitValidation {
+  [key: string]: string | string[]
 }

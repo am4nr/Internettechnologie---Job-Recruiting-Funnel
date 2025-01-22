@@ -26,40 +26,10 @@
           <div class="bg-base-100 rounded-lg shadow">
             <nav class="p-3">
               <ul class="menu menu-lg">
-                <li>
-                  <NuxtLink to="/admin">
-                    <i class="fas fa-home"></i>
-                    Dashboard
-                  </NuxtLink>
-                </li>
-                <li>
-                  <NuxtLink to="/admin/jobs">
-                    <i class="fas fa-briefcase"></i>
-                    Jobs
-                  </NuxtLink>
-                </li>
-                <li>
-                  <NuxtLink to="/admin/applications">
-                    <i class="fas fa-file-alt"></i>
-                    Applications
-                  </NuxtLink>
-                </li>
-                <li>
-                  <NuxtLink to="/admin/users">
-                    <i class="fas fa-users"></i>
-                    Users
-                  </NuxtLink>
-                </li>
-                <li>
-                  <NuxtLink to="/admin/roles">
-                    <i class="fas fa-user-shield"></i>
-                    Roles
-                  </NuxtLink>
-                </li>
-                <li>
-                  <NuxtLink to="/admin/forms">
-                    <i class="fas fa-file-lines"></i>
-                    Forms
+                <li v-for="item in navItems" :key="item.path">
+                  <NuxtLink :to="item.path">
+                    <i :class="item.icon"></i>
+                    {{ item.name }}
                   </NuxtLink>
                 </li>
               </ul>
@@ -78,4 +48,67 @@
 
 <script setup lang="ts">
 import UserMenu from '~/components/navigation/UserMenu.vue'
+import { useAuthStore } from '~/stores/auth'
+import { computed } from 'vue'
+
+const authStore = useAuthStore()
+
+// Compute permissions for different sections
+const hasAdminPerms = computed(() => authStore.hasPermissions(['roles.read_all', 'roles.update_all']))
+const hasJobManagementPerms = computed(() => authStore.hasPermissions([
+  'jobs.create',
+  'applications.read_all',
+  'applications.change_status',
+  'forms.read_all'
+]))
+
+// Navigation items based on permissions
+const navItems = computed(() => {
+  const items = [
+    {
+      name: 'Dashboard',
+      path: '/admin',
+      icon: 'fas fa-home'
+    }
+  ]
+
+  // Job management items - available to both admins and recruiters
+  if (hasJobManagementPerms.value || hasAdminPerms.value) {
+    items.push(
+      {
+        name: 'Jobs',
+        path: '/admin/jobs',
+        icon: 'fas fa-briefcase'
+      },
+      {
+        name: 'Applications',
+        path: '/admin/applications',
+        icon: 'fas fa-file-alt'
+      },
+      {
+        name: 'Forms',
+        path: '/admin/forms',
+        icon: 'fas fa-file-lines'
+      }
+    )
+  }
+
+  // Admin-only items
+  if (hasAdminPerms.value) {
+    items.push(
+      {
+        name: 'Users',
+        path: '/admin/users',
+        icon: 'fas fa-users'
+      },
+      {
+        name: 'Roles',
+        path: '/admin/roles',
+        icon: 'fas fa-user-shield'
+      }
+    )
+  }
+
+  return items
+})
 </script> 
